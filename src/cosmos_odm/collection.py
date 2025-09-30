@@ -94,8 +94,8 @@ class Collection(Generic[T]):
 
             return self.document_type.model_validate_cosmos(response)
 
-        except cosmos_exceptions.CosmosResourceNotFoundError:
-            raise NotFound(f"Document with id='{id}' and pk='{pk}' not found")
+        except cosmos_exceptions.CosmosResourceNotFoundError as ex:
+            raise NotFound(f"Document with id='{id}' and pk='{pk}' not found") from ex
         except cosmos_exceptions.CosmosHttpResponseError as ex:
             self._handle_cosmos_exception(ex)
 
@@ -176,8 +176,8 @@ class Collection(Generic[T]):
                 **kwargs
             )
 
-        except cosmos_exceptions.CosmosResourceNotFoundError:
-            raise NotFound(f"Document with id='{id}' and pk='{pk}' not found")
+        except cosmos_exceptions.CosmosResourceNotFoundError as ex:
+            raise NotFound(f"Document with id='{id}' and pk='{pk}' not found") from ex
         except cosmos_exceptions.CosmosHttpResponseError as ex:
             self._handle_cosmos_exception(ex)
 

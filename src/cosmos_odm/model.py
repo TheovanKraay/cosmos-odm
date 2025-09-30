@@ -1,11 +1,16 @@
 """Core model classes and decorators for Cosmos ODM."""
 
+import contextlib
 from datetime import datetime
-from typing import Any, Generic, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .types import ContainerSettings, FullTextIndexSpec, VectorIndexSpec, VectorPolicySpec
+
+if TYPE_CHECKING:
+    from .client import CosmosClientManager
+    from .collection import Collection
 
 T = TypeVar("T")
 PKType = TypeVar("PKType")
@@ -226,16 +231,13 @@ class Document(BaseModel):
         for field_name, field_info in cls.model_fields.items():
             if field_name in data:
                 field_type = field_info.annotation
-                if field_type == datetime or (
+                if (field_type == datetime or (
                     hasattr(field_type, "__origin__")
                     and field_type.__origin__ is Union
                     and datetime in field_type.__args__
-                ):
-                    if isinstance(data[field_name], str):
-                        try:
-                            data[field_name] = datetime.fromisoformat(data[field_name])
-                        except (ValueError, TypeError):
-                            pass  # Keep original value if parsing fails
+                )) and isinstance(data[field_name], str):
+                    with contextlib.suppress(ValueError, TypeError):
+                        data[field_name] = datetime.fromisoformat(data[field_name])
 
         # Handle PK fields - wrap partition key values in PK objects
         pk_field = cls.get_partition_key_field()
@@ -244,7 +246,7 @@ class Document(BaseModel):
 
         return cls.model_validate(data)
 
-    def upgrade(self, from_version: int) -> "Document":
+    def upgrade(self, from_version: int) -> "Document":  # noqa: ARG002
         """Upgrade document from an older schema version."""
         # Default implementation - subclasses can override
         return self

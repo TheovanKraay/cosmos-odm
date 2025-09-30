@@ -116,7 +116,7 @@ class FilterBuilder:
         elif operator == "$in":
             if isinstance(value, (list, tuple)) and value:
                 param_names = []
-                for i, v in enumerate(value):
+                for _ in value:
                     param_names.append(f"@param{param_counter}")
                     param_counter += 1
                 condition = f"{field_path} IN ({', '.join(param_names)})"
@@ -125,17 +125,14 @@ class FilterBuilder:
         elif operator == "$nin":
             if isinstance(value, (list, tuple)) and value:
                 param_names = []
-                for i, v in enumerate(value):
+                for _ in value:
                     param_names.append(f"@param{param_counter}")
                     param_counter += 1
                 condition = f"{field_path} NOT IN ({', '.join(param_names)})"
             else:
                 condition = "1=1"  # All values match
         elif operator == "$exists":
-            if value:
-                condition = f"IS_DEFINED({field_path})"
-            else:
-                condition = f"NOT IS_DEFINED({field_path})"
+            condition = f"IS_DEFINED({field_path})" if value else f"NOT IS_DEFINED({field_path})"
             # Don't increment param_counter for $exists as it doesn't use parameters
         elif operator == "$regex":
             # Cosmos DB uses CONTAINS, STARTSWITH, ENDSWITH for string matching

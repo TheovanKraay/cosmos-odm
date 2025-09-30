@@ -241,7 +241,7 @@ class IndexManager:
             return container_props.get("indexingPolicy", {})
 
         except Exception as ex:
-            raise CosmosODMError(f"Failed to ensure indexes: {str(ex)}")
+            raise CosmosODMError(f"Failed to ensure indexes: {str(ex)}") from ex
 
     def _build_vector_configuration(
         self,
