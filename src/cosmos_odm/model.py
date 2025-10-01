@@ -1,9 +1,11 @@
 """Core model classes and decorators for Cosmos ODM."""
 
 import contextlib
+import copy
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, Union
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Dict, Generic, Optional, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,6 +17,13 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 PKType = TypeVar("PKType")
+
+
+class MergeStrategy(str, Enum):
+    """Strategy for merging document changes during sync operations."""
+    LOCAL = "local"  # Keep local changes, merge with remote
+    REMOTE = "remote"  # Overwrite with remote version
+    MANUAL = "manual"  # Require manual conflict resolution
 
 
 class PK(Generic[PKType]):
@@ -161,6 +170,11 @@ class Document(BaseModel):
             self.created_at = now
         if self.updated_at is None:
             self.updated_at = now
+            
+        # Initialize state management as instance attributes (not Pydantic fields)
+        object.__setattr__(self, '_saved_state', None)
+        object.__setattr__(self, '_previous_saved_state', None)
+        object.__setattr__(self, '_state_management_enabled', False)
 
     @classmethod
     def get_container_settings(cls) -> ContainerSettings:
@@ -217,10 +231,11 @@ class Document(BaseModel):
 
         return value
 
-    @property
+    @property 
     def pk(self) -> Any:
         """Get the partition key value for this document."""
-        # Directly compute to avoid recursion
+        # Get the actual field value from the Pydantic field, not through property access
+        # to avoid recursion when partition_key_path is "/pk"
         settings = self.__class__.get_container_settings()
         pk_path = settings.partition_key_path
         
@@ -228,19 +243,32 @@ class Document(BaseModel):
         if pk_path.startswith("/"):
             pk_path = pk_path[1:]
         
-        # For aliased fields like "pk", find the actual field name
+        # Check if there's an aliased field that maps to this path
         for field_name, field_info in self.__class__.model_fields.items():
             if field_info.alias == pk_path:
-                value = getattr(self, field_name)
+                # Use the actual field name, not the alias
+                value = super().__getattribute__(field_name)
                 break
         else:
-            # No alias match, use direct field access
-            value = getattr(self, pk_path)
+            # No alias match, check if it's the pk property itself
+            if pk_path == "pk":
+                # This is a recursive case - look for the actual field that should be the partition key
+                # Look for a field with alias "partitionKey" (our default alias)
+                for field_name, field_info in self.__class__.model_fields.items():
+                    if field_info.alias == "partitionKey":
+                        value = super().__getattribute__(field_name)
+                        break
+                else:
+                    # Fallback - could not determine partition key
+                    raise ValueError("Could not determine partition key field")
+            else:
+                # Direct field access
+                value = super().__getattribute__(pk_path)
         
         # Unwrap PK wrapper if present
         if isinstance(value, PK):
             return value.value
-
+            
         return value
 
     def model_dump_cosmos(self) -> dict[str, Any]:
@@ -315,3 +343,104 @@ class Document(BaseModel):
             database_name=database,
             client_manager=client_manager
         )
+
+    # State Management Methods
+    
+    def _enable_state_management(self) -> None:
+        """Enable state management for this document."""
+        object.__setattr__(self, '_state_management_enabled', True)
+        # Save current state as the baseline
+        self._save_state()
+    
+    def _disable_state_management(self) -> None:
+        """Disable state management for this document."""
+        object.__setattr__(self, '_state_management_enabled', False)
+        object.__setattr__(self, '_saved_state', None)
+        object.__setattr__(self, '_previous_saved_state', None)
+    
+    def _save_state(self) -> None:
+        """Save current document state for change tracking."""
+        if getattr(self, '_state_management_enabled', False):
+            saved_state = getattr(self, '_saved_state', None)
+            if saved_state is not None:
+                object.__setattr__(self, '_previous_saved_state', copy.deepcopy(saved_state))
+            current_state = self.model_dump(exclude={"_saved_state", "_previous_saved_state", "_state_management_enabled"})
+            object.__setattr__(self, '_saved_state', copy.deepcopy(current_state))
+    
+    @property
+    def is_changed(self) -> bool:
+        """Check if document has unsaved changes."""
+        if not getattr(self, '_state_management_enabled', False):
+            return False
+        saved_state = getattr(self, '_saved_state', None)
+        if saved_state is None:
+            return False
+        current_state = self.model_dump(exclude={"_saved_state", "_previous_saved_state", "_state_management_enabled"})
+        return current_state != saved_state
+    
+    def get_changes(self) -> Dict[str, Any]:
+        """Get dictionary of changed fields."""
+        if not getattr(self, '_state_management_enabled', False):
+            return {}
+        saved_state = getattr(self, '_saved_state', None)
+        if saved_state is None:
+            return {}
+        
+        current_state = self.model_dump(exclude={"_saved_state", "_previous_saved_state", "_state_management_enabled"})
+        changes = {}
+        
+        for key, current_value in current_state.items():
+            saved_value = saved_state.get(key)
+            if current_value != saved_value:
+                changes[key] = current_value
+                
+        return changes
+    
+    def get_previous_changes(self) -> Dict[str, Any]:
+        """Get dictionary of changes from previous save."""
+        if not getattr(self, '_state_management_enabled', False):
+            return {}
+        previous_saved_state = getattr(self, '_previous_saved_state', None)
+        saved_state = getattr(self, '_saved_state', None)
+        if previous_saved_state is None or saved_state is None:
+            return {}
+        
+        changes = {}
+        for key, saved_value in saved_state.items():
+            previous_value = previous_saved_state.get(key)
+            if saved_value != previous_value:
+                changes[key] = saved_value
+                
+        return changes
+    
+    def rollback(self) -> None:
+        """Rollback document to last saved state."""
+        if not getattr(self, '_state_management_enabled', False):
+            return
+        saved_state = getattr(self, '_saved_state', None)
+        if saved_state is None:
+            return
+        
+        for key, value in saved_state.items():
+            if hasattr(self, key):
+                try:
+                    setattr(self, key, value)
+                except AttributeError:
+                    # Skip read-only properties or computed fields
+                    continue
+    
+    @property
+    def has_changed(self) -> bool:
+        """Check if document has changed since previous save."""
+        return bool(self.get_previous_changes())
+    
+    def disable_state_management(self) -> None:
+        """Disable state management for this document."""
+        object.__setattr__(self, '_state_management_enabled', False)
+        object.__setattr__(self, '_saved_state', None)
+        object.__setattr__(self, '_previous_saved_state', None)
+    
+    def enable_state_management(self) -> None:
+        """Enable state management for this document."""
+        object.__setattr__(self, '_state_management_enabled', True)
+        self._save_state()

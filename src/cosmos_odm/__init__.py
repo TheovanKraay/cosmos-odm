@@ -18,7 +18,8 @@ from .errors import (
     ThroughputExceeded,
     VectorIndexMissing,
 )
-from .model import PK, Document, ETag, container
+from .model import Document, ETag, PK, MergeStrategy, container, embeddings
+from .query import QueryBuilder, FindQuery, BulkWriter
 from .types import QueryPage, RUMetrics, SearchResults
 
 __all__ = [
@@ -27,10 +28,16 @@ __all__ = [
     "Collection",
     "CosmosClientManager",
 
+    # Query interface
+    "QueryBuilder",
+    "FindQuery",
+    "BulkWriter",
+
     # Types and decorators
     "container",
     "PK",
     "ETag",
+    "MergeStrategy",
     "SearchResults",
     "QueryPage",
     "RUMetrics",

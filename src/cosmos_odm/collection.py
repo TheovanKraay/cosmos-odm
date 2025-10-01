@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, Generic, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 from azure.cosmos import exceptions as cosmos_exceptions
 from azure.cosmos import ContainerProxy
@@ -18,7 +18,8 @@ from .errors import (
     ThroughputExceeded,
 )
 from .filters import FilterBuilder
-from .model import Document
+from .model import Document, MergeStrategy
+from .query import FindQuery, BulkWriter
 from .search_native import IndexManager, SearchQueryBuilder
 from .types import PatchOp, QueryPage, RUMetrics, SearchResults
 
@@ -264,6 +265,190 @@ class Collection(Generic[T]):
 
         except cosmos_exceptions.CosmosHttpResponseError as ex:
             self._handle_cosmos_exception(ex)
+
+    # Enhanced CRUD Operations
+    
+    async def save(self, document: T) -> T:
+        """Save document (upsert operation)."""
+        try:
+            # Update timestamp
+            from datetime import datetime, timezone
+            document.updated_at = datetime.now(timezone.utc)
+            
+            # Prepare document data
+            doc_data = document.model_dump_cosmos()
+            
+            # Upsert the document
+            response = await self.async_container.upsert_item(
+                body=doc_data,
+                partition_key=document.pk
+            )
+            
+            # Update document with response data and save state
+            result = self.document_type.model_validate_cosmos(response)
+            result._save_state()
+            return result
+            
+        except cosmos_exceptions.CosmosHttpResponseError as e:
+            self._handle_cosmos_exception(e)
+    
+    async def save_changes(self, document: T) -> Optional[T]:
+        """Save only changed fields. Returns None if no changes."""
+        if not document.is_changed:
+            return None
+        
+        changes = document.get_changes()
+        if not changes:
+            return None
+        
+        # Update timestamp in changes
+        from datetime import datetime, timezone
+        changes["updated_at"] = datetime.now(timezone.utc)
+        
+        # Perform partial update
+        updated_doc = await self.update(document.pk, document.id, changes)
+        updated_doc._save_state()
+        return updated_doc
+    
+    async def replace_document(self, document: T, *, ignore_etag: bool = False) -> T:
+        """Replace entire document."""
+        try:
+            # Update timestamp
+            from datetime import datetime, timezone
+            document.updated_at = datetime.now(timezone.utc)
+            
+            # Prepare document data
+            doc_data = document.model_dump_cosmos()
+            
+            # Set etag condition if not ignoring
+            etag = None if ignore_etag else (document.etag.value if document.etag else None)
+            
+            # Replace the document
+            response = await self.async_container.replace_item(
+                item=document.id,
+                body=doc_data,
+                partition_key=document.pk,
+                etag=etag,
+                match_condition=None if ignore_etag else "IfMatch"
+            )
+            
+            # Update document with response data and save state
+            result = self.document_type.model_validate_cosmos(response)
+            result._save_state()
+            return result
+            
+        except cosmos_exceptions.CosmosHttpResponseError as e:
+            self._handle_cosmos_exception(e)
+    
+    async def sync_document(self, document: T, merge_strategy: MergeStrategy = MergeStrategy.REMOTE) -> T:
+        """Sync document with database version."""
+        # Get latest version from database
+        db_doc = await self.get(document.pk, document.id)
+        
+        if merge_strategy == MergeStrategy.REMOTE:
+            # Use remote version, save state
+            db_doc._save_state()
+            return db_doc
+        
+        elif merge_strategy == MergeStrategy.LOCAL:
+            if not document._state_management_enabled:
+                raise ValueError("Local merge strategy requires state management to be enabled")
+            
+            # Keep local changes, merge with remote
+            local_changes = document.get_changes()
+            
+            # Apply local changes to remote document
+            for key, value in local_changes.items():
+                if hasattr(db_doc, key):
+                    setattr(db_doc, key, value)
+            
+            # Save the merged document
+            return await self.save(db_doc)
+        
+        else:  # MANUAL
+            raise NotImplementedError("Manual merge strategy requires custom implementation")
+    
+    async def delete_document(self, document: T, *, ignore_etag: bool = False) -> None:
+        """Delete document."""
+        etag = None if ignore_etag else (document.etag.value if document.etag else None)
+        await self.delete(
+            document.pk, 
+            document.id, 
+            etag=etag,
+            match_condition=None if ignore_etag else "IfMatch"
+        )
+    
+    # Query Interface
+    
+    def find(self, condition: str = None, **params: Any) -> "FindQuery[T]":
+        """Create a query builder for finding documents."""
+        from .query import FindQuery
+        query = FindQuery(self)
+        if condition:
+            query = query.where(condition, **params)
+        return query
+    
+    async def find_one(self, condition: str = None, **params: Any) -> Optional[T]:
+        """Find first document matching condition."""
+        query = self.find(condition, **params)
+        return await query.first()
+    
+    def find_all(self) -> "FindQuery[T]":
+        """Find all documents in collection."""
+        from .query import FindQuery
+        return FindQuery(self)
+    
+    async def count_documents(self, condition: str = None, **params: Any) -> int:
+        """Count documents matching condition."""
+        query = self.find(condition, **params)
+        return await query.count()
+    
+    async def exists_documents(self, condition: str = None, **params: Any) -> bool:
+        """Check if documents exist matching condition."""
+        query = self.find(condition, **params)
+        return await query.exists()
+    
+    # Bulk Operations
+    
+    def bulk_writer(self) -> "BulkWriter":
+        """Create a bulk writer for batch operations."""
+        from .query import BulkWriter
+        return BulkWriter(self)
+    
+    async def insert_many(self, documents: List[T]) -> List[T]:
+        """Insert multiple documents."""
+        bulk = self.bulk_writer()
+        for doc in documents:
+            bulk.insert(doc)
+        
+        results = await bulk.execute()
+        # Return successfully inserted documents
+        inserted_docs = []
+        for i, result in enumerate(results):
+            if result["success"]:
+                # Re-fetch the document to get updated system fields
+                doc = documents[i]
+                updated_doc = await self.get(doc.pk, doc.id)
+                inserted_docs.append(updated_doc)
+        
+        return inserted_docs
+    
+    async def delete_many(self, condition: str, **params: Any) -> int:
+        """Delete multiple documents matching condition."""
+        # First find all matching documents
+        query = self.find(condition, **params)
+        docs_to_delete = await query.to_list()
+        
+        if not docs_to_delete:
+            return 0
+        
+        # Delete them in bulk
+        bulk = self.bulk_writer()
+        for doc in docs_to_delete:
+            bulk.delete(doc.pk, doc.id)
+        
+        results = await bulk.execute()
+        return sum(1 for result in results if result["success"])
 
     async def vector_search(
         self,

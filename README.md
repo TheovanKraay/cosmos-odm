@@ -8,11 +8,11 @@ A production-grade, async-first **Azure Cosmos DB Core (SQL) ODM** for Python wi
 
 ### 🚀 **Core ODM Capabilities**
 - **Async-first** with optional sync facade
-- **Pydantic v2** models with full validation
-- **Key-centric design**: partition key + id are first-class citizens
-- **Point reads preferred** for optimal performance
-- **ETag/optimistic concurrency** control
-- **Request Unit (RU) telemetry** on every operation
+- **Enhanced CRUD operations**: smart save, replace, sync with conflict resolution
+- **Document state management**: change tracking, rollback, optimized updates
+- **Type-safe query builder**: fluent interface with method chaining and SQL generation
+- **Bulk operations**: efficient batch processing with BulkWriter for high-throughput
+- **Pydantic v2** models with full validation and type safety
 
 ### 🔍 **Native Search (No External Dependencies)**
 - **Vector search** using Cosmos DB's `VectorDistance()` function
@@ -26,6 +26,7 @@ A production-grade, async-first **Azure Cosmos DB Core (SQL) ODM** for Python wi
 - **Change Feed** with continuation tokens
 - **Per-call consistency levels**
 - **Container provisioning** with TTL, indexing, unique keys
+- **Request Unit (RU) telemetry** on every operation
 
 ## Installation
 
@@ -161,131 +162,109 @@ async def main():
 asyncio.run(main())
 ```
 
+## Enhanced Features
+
+This ODM provides advanced capabilities beyond basic CRUD operations:
+
+- **📖 [Enhanced CRUD Operations](docs/enhanced-crud.md)** - Smart save, sync, and conflict resolution
+- **🔄 [Document State Management](docs/state-management.md)** - Change tracking and optimized updates  
+- **🔍 [Type-Safe Query Interface](docs/query-interface.md)** - Fluent query builder with method chaining
+- **⚡ [Bulk Operations](docs/bulk-operations.md)** - High-throughput batch processing
+- **🔎 [Search Features](docs/search.md)** - Vector, full-text, and hybrid search
+- **📚 [API Reference](docs/api-reference.md)** - Complete documentation and configuration
+
+## Examples
+
+### Enhanced CRUD with State Management
+
+```python
+# Enable automatic change tracking
+@container(name="documents", partition_key_path="/tenantId")
+class TrackedDocument(Document):
+    # ... fields ...
+    class Config:
+        state_management = True
+
+# Smart save with change detection
+doc.title = "Updated Title"
+if doc.is_changed:
+    await docs.save_changes(doc)  # Only sends changed fields
+```
+
+### Type-Safe Query Building
+
+```python
+# Fluent query interface
+results = await docs.find() \
+    .where("status").equals("published") \
+    .where("rating").greater_than(4.0) \
+    .order_by("created_date", ascending=False) \
+    .limit(10) \
+    .to_list()
+```
+
+### Bulk Operations
+
+```python
+# Efficient batch processing
+from cosmos_odm.query import BulkWriter
+
+bulk = BulkWriter(docs)
+for doc in large_document_list:
+    bulk.insert(doc)
+
+results = await bulk.execute()
+```
+
 ## Native Search Examples
 
-### Vector Search
+This ODM provides powerful search capabilities built directly into Azure Cosmos DB:
 
+### Vector Search
 ```python
 # Semantic similarity search
 my_query_vector = [0.1, 0.2, 0.3, ...]  # From your embedding model
 
-results = await docs.vector_search(
+similar_docs = await docs.vector_search(
     vector=my_query_vector,
-    vector_path="/content_vector",
     k=10,
-    filter={"status": "published"},
-    partition_key="tenant-1"  # Optional: single-partition search
+    similarity_score_threshold=0.8
 )
-
-for doc in results.items:
-    print(f"Found: {doc.title} (Score: {results.scores[0] if results.scores else 'N/A'})")
-print(f"Search cost: {results.ru_metrics.request_charge} RU")
 ```
 
-### Full-Text Search (BM25)
-
+### Full-Text Search  
 ```python
-# Keyword-based search with BM25 ranking
-results = await docs.full_text_search(
-    text="machine learning algorithms",
-    fields=["/title", "/content"],
-    k=10,
-    filter={"status": "published"}
+# BM25-based text search
+search_results = await docs.full_text_search(
+    query="machine learning python",
+    k=15
 )
-
-for doc in results.items:
-    print(f"Found: {doc.title}")
 ```
 
-### Hybrid Search (RRF Fusion)
-
+### Hybrid Search
 ```python
-# Best of both worlds: semantic + keyword search
-results = await docs.hybrid_search(
-    text="machine learning vector search",
+# Combined vector + text search using RRF
+hybrid_results = await docs.hybrid_search(
+    text_query="machine learning",
     vector=my_query_vector,
-    fields=["/title", "/content"],
-    vector_path="/content_vector",
     k=10,
-    weights=[2, 1],  # Favor text over vector
-    filter={"status": "published"}
-)
-
-for doc in results.items:
-    print(f"Hybrid result: {doc.title}")
-```
-
-## Generated SQL Examples
-
-The ODM generates optimized Cosmos SQL queries:
-
-### Vector Search SQL
-```sql
-SELECT TOP @k c
-FROM c
-WHERE c.status = @status
-ORDER BY RANK VectorDistance(c/content_vector, @vector)
-```
-
-### Full-Text Search SQL
-```sql
-SELECT TOP @k c  
-FROM c
-WHERE c.status = @status
-ORDER BY RANK FullTextScore(c/title, @text) + FullTextScore(c/content, @text)
-```
-
-### Hybrid Search SQL
-```sql
-SELECT TOP @k c
-FROM c  
-WHERE c.status = @status
-ORDER BY RANK RRF(
-    FullTextScore(c/content, @text), 
-    VectorDistance(c/content_vector, @vector), 
-    @weights
+    alpha=0.6  # Balance between vector (0.6) and text (0.4)
 )
 ```
 
-## Advanced Features
+📖 **[See complete search documentation](docs/search.md)** for vector embeddings, full-text indexing, hybrid search patterns, and performance optimization.
 
-### Query with Pagination
+## Documentation
 
-```python
-async def paginated_search():
-    continuation = None
-    page_num = 0
-    
-    while True:
-        async for page in docs.query(
-            sql="SELECT * FROM c WHERE c.status = @status",
-            parameters={"status": "published"},
-            partition_key="tenant-1",
-            max_item_count=100,
-            continuation_token=continuation
-        ):
-            page_num += 1
-            print(f"Page {page_num}: {len(page.items)} items, {page.ru_metrics.request_charge} RU")
-            
-            for doc in page.items:
-                print(f"  - {doc.title}")
-            
-            continuation = page.continuation_token
-            if not continuation:
-                return
-            break
-```
+For detailed documentation on all features:
 
-### Transactional Batches
-
-```python
-# All operations succeed or fail together within a partition
-async with docs.batch(pk="tenant-1") as batch:
-    await batch.create(doc1)
-    await batch.replace(doc2)
-    await batch.delete("doc-3")
-# Automatically committed on exit
-```
+- **📖 [Enhanced CRUD Operations](docs/enhanced-crud.md)** - Smart save, sync, and conflict resolution
+- **🔄 [Document State Management](docs/state-management.md)** - Change tracking and optimized updates  
+- **🔍 [Type-Safe Query Interface](docs/query-interface.md)** - Fluent query builder with method chaining
+- **⚡ [Bulk Operations](docs/bulk-operations.md)** - High-throughput batch processing
+- **🔎 [Search Features](docs/search.md)** - Vector, full-text, and hybrid search
+- **📚 [API Reference](docs/api-reference.md)** - Complete documentation and configuration
+- **📋 [Documentation Index](docs/README.md)** - Full documentation navigation
 
 ### Patch Operations
 
@@ -372,24 +351,28 @@ except VectorIndexMissing as e:
     print(f"Missing vector index: {e.remediation}")
     await docs.ensure_indexes()  # Fix the issue
     
-except ThroughputExceeded as e:
-    print(f"Rate limited. Retry after {e.retry_after_ms}ms")
-    
-except ConditionalCheckFailed:
-    print("ETag mismatch - document was modified")
+## Error Handling
+
+```python
+from cosmos_odm.exceptions import DocumentNotFoundError, ConflictError
+
+try:
+    doc = await docs.get(pk="tenant-1", id="nonexistent")
+except DocumentNotFoundError:
+    print("Document not found")
+
+try:
+    await docs.save(doc, if_match="outdated-etag")
+except ConflictError:
+    print("Document was modified by another process")
 ```
 
 ## Development & Testing
 
 ### Running Tests
 
-The package includes comprehensive tests that work with both the Cosmos DB Local Emulator and Azure Cosmos DB cloud instances.
+Run the comprehensive test suite covering all enhanced features:
 
-**Prerequisites for testing**:
-- Install [Cosmos DB Local Emulator](https://docs.microsoft.com/en-us/azure/cosmos-db/local-emulator) for local testing
-- Or set up an Azure Cosmos DB account for cloud testing
-
-**Run the test suite**:
 ```bash
 # Install test dependencies
 pip install -e ".[test]"
@@ -397,62 +380,18 @@ pip install -e ".[test]"
 # Run all tests (uses local emulator by default)
 pytest tests/ -v
 
-# Run tests against Azure Cosmos DB cloud (requires authentication)
+# Run tests against Azure Cosmos DB cloud
 export AZURE_COSMOSDB_ENDPOINT="https://your-account.documents.azure.com:443/"
 pytest tests/ -v
 ```
 
-**Example scripts**: Check the `examples/` directory for real-world usage patterns:
-- `examples/demo_integration.py` - Basic ODM operations
-- `examples/document_management.py` - Advanced document management system
+**Prerequisites**: Install [Cosmos DB Local Emulator](https://docs.microsoft.com/en-us/azure/cosmos-db/local-emulator) or set up an Azure Cosmos DB account.
 
-### Contributing
-
-This is an experimental package under active development. Contributions, feedback, and bug reports are welcome!
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests to ensure everything works
-5. Submit a pull request
-
-## Limitations & Troubleshooting
-
-### Current Limitations
-- **Experimental status**: API may change before stable release
-- Vector search requires Azure Cosmos DB for NoSQL with vector preview enabled
-- Full-text search requires Cosmos DB accounts with full-text search preview
-- Maximum vector dimensions: 2000 (varies by region/account)
-- RRF hybrid search may not be available in all regions yet
-
-### Troubleshooting
-1. **Package import fails**: Ensure you've installed with `pip install -e .`
-2. **Vector search fails**: Ensure vector policy + index are configured correctly
-3. **Full-text search fails**: Verify full-text index covers the searched paths  
-4. **High RU consumption**: Consider using single-partition searches, quantized indexes
-5. **Index provisioning errors**: Check account features and regional availability
-
-## Sync Interface
-
-For non-async environments, use the sync facade:
-
-```python
-from cosmos_odm.sync import Collection as SyncCollection
-
-# Sync operations mirror async API
-docs_sync = SyncCollection.from_async(docs)
-doc = docs_sync.get(pk="tenant-1", id="doc-1")
-results = docs_sync.vector_search(vector=my_vector, k=10)
-```
-
-## Development
+### Development
 
 ```bash
 # Install development dependencies
 pip install -e ".[dev]"
-
-# Run tests
-pytest
 
 # Type checking
 mypy src/
@@ -462,17 +401,17 @@ ruff check src/ tests/
 black src/ tests/
 ```
 
-## License
-
-MIT License - see [LICENSE](LICENSE) file.
-
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality  
+2. Create a feature branch  
+3. Add tests for new functionality
 4. Ensure all tests pass and type checking is clean
 5. Submit a pull request
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file.
 
 ---
 
