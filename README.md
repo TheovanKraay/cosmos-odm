@@ -164,14 +164,9 @@ asyncio.run(main())
 
 ## Enhanced Features
 
-This ODM provides advanced capabilities beyond basic CRUD operations:
+This ODM provides advanced capabilities beyond basic CRUD operations including enhanced CRUD operations with smart save and conflict resolution, document state management with change tracking, type-safe query builder interface, bulk operations for high-throughput processing, and comprehensive search features.
 
-- **📖 [Enhanced CRUD Operations](docs/enhanced-crud.md)** - Smart save, sync, and conflict resolution
-- **🔄 [Document State Management](docs/state-management.md)** - Change tracking and optimized updates  
-- **🔍 [Type-Safe Query Interface](docs/query-interface.md)** - Fluent query builder with method chaining
-- **⚡ [Bulk Operations](docs/bulk-operations.md)** - High-throughput batch processing
-- **🔎 [Search Features](docs/search.md)** - Vector, full-text, and hybrid search
-- **📚 [API Reference](docs/api-reference.md)** - Complete documentation and configuration
+📖 **[See detailed documentation](docs/README.md)** for all enhanced features.
 
 ## Examples
 
@@ -335,22 +330,6 @@ Call `await docs.ensure_indexes()` to apply these policies idempotently.
 - **Cross-partition searches** work but consume more RUs
 - Design partition keys to enable partition-local search when possible
 
-## Error Handling
-
-```python
-from cosmos_odm import (
-    ConditionalCheckFailed, 
-    ThroughputExceeded, 
-    VectorIndexMissing,
-    FullTextIndexMissing
-)
-
-try:
-    await docs.vector_search(vector=my_vector)
-except VectorIndexMissing as e:
-    print(f"Missing vector index: {e.remediation}")
-    await docs.ensure_indexes()  # Fix the issue
-    
 ## Error Handling
 
 ```python
