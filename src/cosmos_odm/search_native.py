@@ -156,6 +156,8 @@ class IndexManager:
     async def ensure_indexes(
         self,
         container,  # AsyncContainerProxy
+        database,  # AsyncDatabaseProxy
+        container_name: str,
         settings: ContainerSettings
     ) -> dict[str, Any]:
         """Ensure vector and full-text indexes are provisioned.
@@ -233,7 +235,7 @@ class IndexManager:
             # Update container if needed
             if needs_update:
                 container_props["indexingPolicy"] = indexing_policy
-                await container.replace_container(container_props)
+                await database.replace_container(container_name, container_props)
 
                 # Re-read to get the effective policy
                 container_props = await container.read()

@@ -28,10 +28,10 @@ class CosmosClientManager:
         self.key = key or os.getenv("COSMOS_KEY")
         self.client_kwargs = client_kwargs
 
-        if not self.connection_string and not (self.endpoint and self.key):
+        if not self.connection_string and not self.endpoint:
             raise CosmosODMError(
-                "Either connection_string or both endpoint and key must be provided. "
-                "You can also set COSMOS_CONNECTION_STRING, COSMOS_ENDPOINT, and COSMOS_KEY environment variables."
+                "Either connection_string or endpoint must be provided. "
+                "You can also set COSMOS_CONNECTION_STRING or COSMOS_ENDPOINT environment variables."
             )
 
         self._async_client: AsyncCosmosClient | None = None
@@ -48,9 +48,18 @@ class CosmosClientManager:
                     self.connection_string, **self.client_kwargs
                 )
             else:
-                self._async_client = AsyncCosmosClient(
-                    self.endpoint, self.key, **self.client_kwargs
-                )
+                if self.key:
+                    # Use key-based authentication
+                    self._async_client = AsyncCosmosClient(
+                        self.endpoint, self.key, **self.client_kwargs
+                    )
+                else:
+                    # Use Default Azure Credentials
+                    from azure.identity.aio import DefaultAzureCredential
+                    credential = DefaultAzureCredential()
+                    self._async_client = AsyncCosmosClient(
+                        self.endpoint, credential, **self.client_kwargs
+                    )
         return self._async_client
 
     @property
@@ -62,9 +71,18 @@ class CosmosClientManager:
                     self.connection_string, **self.client_kwargs
                 )
             else:
-                self._sync_client = CosmosClient(
-                    self.endpoint, self.key, **self.client_kwargs
-                )
+                if self.key:
+                    # Use key-based authentication
+                    self._sync_client = CosmosClient(
+                        self.endpoint, self.key, **self.client_kwargs
+                    )
+                else:
+                    # Use Default Azure Credentials
+                    from azure.identity import DefaultAzureCredential
+                    credential = DefaultAzureCredential()
+                    self._sync_client = CosmosClient(
+                        self.endpoint, credential, **self.client_kwargs
+                    )
         return self._sync_client
 
     def get_async_database(self, database_name: str) -> AsyncDatabaseProxy:

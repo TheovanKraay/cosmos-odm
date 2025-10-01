@@ -1,7 +1,8 @@
 """Core model classes and decorators for Cosmos ODM."""
 
 import contextlib
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -76,17 +77,26 @@ def container(
         vector_policy_specs = []
         if vector_policy:
             for spec in vector_policy:
-                vector_policy_specs.append(VectorPolicySpec(**spec))
+                if isinstance(spec, VectorPolicySpec):
+                    vector_policy_specs.append(spec)
+                else:
+                    vector_policy_specs.append(VectorPolicySpec(**spec))
 
         vector_index_specs = []
         if vector_indexes:
             for spec in vector_indexes:
-                vector_index_specs.append(VectorIndexSpec(**spec))
+                if isinstance(spec, VectorIndexSpec):
+                    vector_index_specs.append(spec)
+                else:
+                    vector_index_specs.append(VectorIndexSpec(**spec))
 
         full_text_index_specs = []
         if full_text_indexes:
             for spec in full_text_indexes:
-                full_text_index_specs.append(FullTextIndexSpec(**spec))
+                if isinstance(spec, FullTextIndexSpec):
+                    full_text_index_specs.append(spec)
+                else:
+                    full_text_index_specs.append(FullTextIndexSpec(**spec))
 
         settings = ContainerSettings(
             name=name,
@@ -125,13 +135,13 @@ class Document(BaseModel):
 
     model_config = ConfigDict(
         populate_by_name=True,
-        extra="forbid",
+        extra="allow",  # Allow extra fields from Cosmos DB system fields
         validate_assignment=True,
         arbitrary_types_allowed=True,
     )
 
     # Required fields
-    id: str = Field(..., description="Document identifier")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Document identifier")
     schema_version: int = Field(default=1, description="Schema version for migrations")
 
     # Optional system fields
@@ -146,7 +156,7 @@ class Document(BaseModel):
         super().__init__(**data)
 
         # Set timestamps if not provided
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if self.created_at is None:
             self.created_at = now
         if self.updated_at is None:
@@ -177,17 +187,29 @@ class Document(BaseModel):
     @classmethod
     def get_partition_key_value(cls, doc: "Document") -> Any:
         """Extract partition key value from a document instance."""
-        pk_field = cls.get_partition_key_field()
+        settings = cls.get_container_settings()
+        pk_path = settings.partition_key_path
+        
+        # Convert "/fieldName" to "fieldName"
+        if pk_path.startswith("/"):
+            pk_path = pk_path[1:]
 
         # Handle nested paths like "tenant/id"
-        if "/" in pk_field:
-            parts = pk_field.split("/")
+        if "/" in pk_path:
+            parts = pk_path.split("/")
             value = doc
             for part in parts:
                 value = getattr(value, part)
             return value
 
-        value = getattr(doc, pk_field)
+        # For aliased fields like "pk", find the actual field name
+        for field_name, field_info in cls.model_fields.items():
+            if field_info.alias == pk_path:
+                value = getattr(doc, field_name)
+                break
+        else:
+            # No alias match, use direct field access
+            value = getattr(doc, pk_path)
 
         # Unwrap PK wrapper if present
         if isinstance(value, PK):
@@ -198,7 +220,28 @@ class Document(BaseModel):
     @property
     def pk(self) -> Any:
         """Get the partition key value for this document."""
-        return self.__class__.get_partition_key_value(self)
+        # Directly compute to avoid recursion
+        settings = self.__class__.get_container_settings()
+        pk_path = settings.partition_key_path
+        
+        # Convert "/fieldName" to "fieldName"
+        if pk_path.startswith("/"):
+            pk_path = pk_path[1:]
+        
+        # For aliased fields like "pk", find the actual field name
+        for field_name, field_info in self.__class__.model_fields.items():
+            if field_info.alias == pk_path:
+                value = getattr(self, field_name)
+                break
+        else:
+            # No alias match, use direct field access
+            value = getattr(self, pk_path)
+        
+        # Unwrap PK wrapper if present
+        if isinstance(value, PK):
+            return value.value
+
+        return value
 
     def model_dump_cosmos(self) -> dict[str, Any]:
         """Serialize document for Cosmos DB storage."""

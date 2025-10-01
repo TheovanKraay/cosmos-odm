@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Generic, TypeVar
 
 from azure.cosmos import exceptions as cosmos_exceptions
+from azure.cosmos import ContainerProxy
 from azure.cosmos.aio import ContainerProxy as AsyncContainerProxy
 
 from .client import CosmosClientManager
@@ -54,6 +55,14 @@ class Collection(Generic[T]):
             self.container_name
         )
 
+    @property
+    def sync_container(self) -> ContainerProxy:
+        """Get sync container proxy."""
+        return self.client_manager.get_sync_container(
+            self.database_name,
+            self.container_name
+        )
+
     def _extract_ru_metrics(self, response_headers: dict[str, Any]) -> RUMetrics:
         """Extract RU metrics from response headers."""
         return RUMetrics(
@@ -87,9 +96,15 @@ class Collection(Generic[T]):
     async def get(self, pk: Any, id: str) -> T:
         """Get document by partition key and id."""
         try:
+            # Extract partition key value if it's a PK wrapper
+            if hasattr(pk, 'value'):
+                pk_value = pk.value
+            else:
+                pk_value = pk
+            
             response = await self.async_container.read_item(
                 item=id,
-                partition_key=pk
+                partition_key=pk_value
             )
 
             return self.document_type.model_validate_cosmos(response)
@@ -102,17 +117,15 @@ class Collection(Generic[T]):
     async def create(self, document: T) -> T:
         """Create a new document."""
         # Update timestamps
-        from datetime import datetime
-        document.updated_at = datetime.utcnow()
+        from datetime import datetime, timezone
+        document.updated_at = datetime.now(timezone.utc)
         if document.created_at is None:
             document.created_at = document.updated_at
 
         try:
             data = document.model_dump_cosmos()
-            response = await self.async_container.create_item(
-                body=data,
-                partition_key=document.pk
-            )
+            # The partition key is embedded in the document body automatically
+            response = await self.async_container.create_item(body=data)
 
             return self.document_type.model_validate_cosmos(response)
 
@@ -121,8 +134,8 @@ class Collection(Generic[T]):
 
     async def replace(self, document: T, if_match: str | None = None) -> T:
         """Replace an existing document."""
-        from datetime import datetime
-        document.updated_at = datetime.utcnow()
+        from datetime import datetime, timezone
+        document.updated_at = datetime.now(timezone.utc)
 
         try:
             data = document.model_dump_cosmos()
@@ -134,7 +147,6 @@ class Collection(Generic[T]):
             response = await self.async_container.replace_item(
                 item=document.id,
                 body=data,
-                partition_key=document.pk,
                 **kwargs
             )
 
@@ -145,16 +157,15 @@ class Collection(Generic[T]):
 
     async def upsert(self, document: T) -> T:
         """Create or replace a document."""
-        from datetime import datetime
-        document.updated_at = datetime.utcnow()
+        from datetime import datetime, timezone
+        document.updated_at = datetime.now(timezone.utc)
         if document.created_at is None:
             document.created_at = document.updated_at
 
         try:
             data = document.model_dump_cosmos()
             response = await self.async_container.upsert_item(
-                body=data,
-                partition_key=document.pk
+                body=data
             )
 
             return self.document_type.model_validate_cosmos(response)
@@ -165,6 +176,12 @@ class Collection(Generic[T]):
     async def delete(self, pk: Any, id: str, if_match: str | None = None) -> None:
         """Delete a document."""
         try:
+            # Extract partition key value if it's a PK wrapper
+            if hasattr(pk, 'value'):
+                pk_value = pk.value
+            else:
+                pk_value = pk
+                
             kwargs = {}
             if if_match:
                 kwargs["etag"] = if_match
@@ -172,7 +189,7 @@ class Collection(Generic[T]):
 
             await self.async_container.delete_item(
                 item=id,
-                partition_key=pk,
+                partition_key=pk_value,
                 **kwargs
             )
 
@@ -192,10 +209,22 @@ class Collection(Generic[T]):
     ) -> AsyncIterator[QueryPage[T]]:
         """Execute SQL query and yield pages of results."""
         try:
+            # Convert parameters to proper format
+            if parameters:
+                if isinstance(parameters, dict):
+                    # Convert dict to list format
+                    param_list = []
+                    for key, value in parameters.items():
+                        param_list.append({"name": f"@{key}", "value": value})
+                else:
+                    # Already in list format (from search methods)
+                    param_list = parameters
+            else:
+                param_list = []
+            
             query_kwargs = {
                 "query": sql,
-                "parameters": parameters or [],
-                "enable_cross_partition_query": cross_partition,
+                "parameters": param_list,
             }
 
             if partition_key is not None:
@@ -204,17 +233,28 @@ class Collection(Generic[T]):
                 query_kwargs["max_item_count"] = max_item_count
             if continuation_token:
                 query_kwargs["continuation_token"] = continuation_token
+            # Cross-partition queries are enabled by default when no partition_key is specified
 
             query_iterable = self.async_container.query_items(**query_kwargs)
 
             async for page in query_iterable.by_page():
+                # Convert AsyncList to list by iterating
+                page_items = []
+                async for item in page:
+                    page_items.append(item)
+                
                 items = [
                     self.document_type.model_validate_cosmos(item)
-                    for item in page
+                    for item in page_items
                 ]
 
-                ru_metrics = self._extract_ru_metrics(page.response_headers)
-                continuation = page.continuation_token
+                # Try to get RU metrics from query_iterable since page doesn't have them
+                ru_metrics = RUMetrics(
+                    request_charge=getattr(query_iterable, "last_request_charge", 0.0),
+                    activity_id=getattr(query_iterable, "last_activity_id", ""),
+                    session_token=getattr(query_iterable, "last_session_token", None)
+                )
+                continuation = getattr(page, 'continuation_token', None)
 
                 yield QueryPage(
                     items=items,
@@ -360,6 +400,63 @@ class Collection(Generic[T]):
             container=self.async_container,
             settings=self._container_settings
         )
+
+    async def _ensure_database(self) -> None:
+        """Ensure database exists."""
+        try:
+            client = self.client_manager.async_client
+            await client.create_database_if_not_exists(self.database_name)
+        except Exception as ex:
+            raise CosmosODMError(f"Failed to create database '{self.database_name}': {ex}") from ex
+
+    async def _ensure_container(self) -> None:
+        """Ensure container exists with proper configuration."""
+        try:
+            database = self.client_manager.get_async_database(self.database_name)
+            
+            # Build partition key spec
+            partition_key = {
+                "paths": [self._container_settings.partition_key_path],
+                "kind": "Hash"
+            }
+            
+            # Build container properties
+            container_props = {
+                "id": self.container_name
+            }
+            
+            # Add TTL if specified
+            if self._container_settings.ttl is not None:
+                container_props["defaultTtl"] = self._container_settings.ttl
+            
+            # Add unique keys if specified
+            if self._container_settings.unique_keys:
+                container_props["uniqueKeyPolicy"] = {
+                    "uniqueKeys": [{"paths": [key]} for key in self._container_settings.unique_keys]
+                }
+            
+            # Create container with throughput if specified
+            offer_throughput = self._container_settings.throughput
+            
+            await database.create_container_if_not_exists(
+                id=self.container_name,
+                partition_key=partition_key,
+                offer_throughput=offer_throughput
+            )
+            
+        except Exception as ex:
+            raise CosmosODMError(f"Failed to create container '{self.container_name}': {ex}") from ex
+
+    async def _get_container(self) -> AsyncContainerProxy:
+        """Get container proxy, ensuring it exists."""
+        await self._ensure_database()
+        await self._ensure_container()
+        return self.async_container
+
+    @property
+    def partition_key_path(self) -> str:
+        """Get partition key path for queries."""
+        return self._container_settings.partition_key_path
 
     async def patch(
         self,
