@@ -2,6 +2,8 @@
 
 A production-grade, async-first **Azure Cosmos DB Core (SQL) ODM** for Python with native **vector search**, **full-text search**, and **hybrid search** capabilities built directly into Azure Cosmos DB for NoSQL.
 
+> **⚠️ Experimental Package**: This package is currently experimental and has not yet been published to PyPI. See [Installation](#installation) section for local testing instructions.
+
 ## Features
 
 ### 🚀 **Core ODM Capabilities**
@@ -27,11 +29,57 @@ A production-grade, async-first **Azure Cosmos DB Core (SQL) ODM** for Python wi
 
 ## Installation
 
+> **🧪 Experimental Installation**: This package is not yet available on PyPI. To test the package locally, you'll need to install it directly from the source code.
+
+### Prerequisites
+- Python 3.11 or higher
+- Git (for cloning the repository)
+
+### Local Installation for Testing
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/TheovanKraay/cosmos-odm.git
+   cd cosmos-odm
+   ```
+
+2. **Install in editable mode** (recommended for development/testing):
+   ```bash
+   pip install -e .
+   ```
+   
+   This installs the package in "editable" mode, meaning:
+   - Changes to the source code are immediately reflected
+   - The package behaves as if installed from PyPI
+   - All dependencies are automatically installed
+
+3. **Alternative: Direct installation**:
+   ```bash
+   pip install .
+   ```
+
+### Verify Installation
+
+Test that the package is working correctly:
+
+```python
+import cosmos_odm
+from cosmos_odm import Document, container, PK, CosmosClientManager
+
+print(f"✅ cosmos-odm version: {cosmos_odm.__version__}")
+```
+
+### Future PyPI Release
+
+Once the package is stabilized and published to PyPI, installation will be simplified to:
+
 ```bash
-pip install cosmos-odm
+pip install cosmos-odm  # Coming soon!
 ```
 
 ## Quick Start
+
+> **📝 Note**: Make sure you've completed the [Installation](#installation) steps above before trying these examples.
 
 ### Define Your Document Model
 
@@ -331,19 +379,58 @@ except ConditionalCheckFailed:
     print("ETag mismatch - document was modified")
 ```
 
+## Development & Testing
+
+### Running Tests
+
+The package includes comprehensive tests that work with both the Cosmos DB Local Emulator and Azure Cosmos DB cloud instances.
+
+**Prerequisites for testing**:
+- Install [Cosmos DB Local Emulator](https://docs.microsoft.com/en-us/azure/cosmos-db/local-emulator) for local testing
+- Or set up an Azure Cosmos DB account for cloud testing
+
+**Run the test suite**:
+```bash
+# Install test dependencies
+pip install -e ".[test]"
+
+# Run all tests (uses local emulator by default)
+pytest tests/ -v
+
+# Run tests against Azure Cosmos DB cloud (requires authentication)
+export AZURE_COSMOSDB_ENDPOINT="https://your-account.documents.azure.com:443/"
+pytest tests/ -v
+```
+
+**Example scripts**: Check the `examples/` directory for real-world usage patterns:
+- `examples/demo_integration.py` - Basic ODM operations
+- `examples/document_management.py` - Advanced document management system
+
+### Contributing
+
+This is an experimental package under active development. Contributions, feedback, and bug reports are welcome!
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests to ensure everything works
+5. Submit a pull request
+
 ## Limitations & Troubleshooting
 
 ### Current Limitations
+- **Experimental status**: API may change before stable release
 - Vector search requires Azure Cosmos DB for NoSQL with vector preview enabled
 - Full-text search requires Cosmos DB accounts with full-text search preview
 - Maximum vector dimensions: 2000 (varies by region/account)
 - RRF hybrid search may not be available in all regions yet
 
 ### Troubleshooting
-1. **Vector search fails**: Ensure vector policy + index are configured correctly
-2. **Full-text search fails**: Verify full-text index covers the searched paths  
-3. **High RU consumption**: Consider using single-partition searches, quantized indexes
-4. **Index provisioning errors**: Check account features and regional availability
+1. **Package import fails**: Ensure you've installed with `pip install -e .`
+2. **Vector search fails**: Ensure vector policy + index are configured correctly
+3. **Full-text search fails**: Verify full-text index covers the searched paths  
+4. **High RU consumption**: Consider using single-partition searches, quantized indexes
+5. **Index provisioning errors**: Check account features and regional availability
 
 ## Sync Interface
 
