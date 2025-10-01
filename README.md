@@ -123,10 +123,23 @@ import asyncio
 from cosmos_odm import CosmosClientManager
 
 async def main():
-    # Initialize client
+    # Option 1: Initialize client with connection string
     client_manager = CosmosClientManager(
         connection_string="AccountEndpoint=https://..."
     )
+    
+    # Option 2: Initialize client with endpoint and DefaultAzureCredential
+    # (Recommended for production - uses managed identity, service principal, etc.)
+    client_manager = CosmosClientManager(
+        endpoint="https://your-account.documents.azure.com:443/"
+        # No key needed - automatically uses DefaultAzureCredential
+    )
+    
+    # Option 3: Initialize client with endpoint and key
+    # client_manager = CosmosClientManager(
+    #     endpoint="https://your-account.documents.azure.com:443/",
+    #     key="your-account-key"
+    # )
     
     # Bind to collection
     docs = await Document.bind(
