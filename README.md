@@ -1,6 +1,6 @@
 # Cosmos ODM
 
-A production-grade, async-first **Azure Cosmos DB Core (SQL) ODM** for Python with native **vector search**, **full-text search**, and **hybrid search** capabilities built directly into Azure Cosmos DB for NoSQL.
+A production-grade, async-first **Azure Cosmos DB NoSQL ODM** for Python with native **vector search**, **full-text search**, and **hybrid search** capabilities built directly into Azure Cosmos DB for NoSQL.
 
 > **⚠️ Experimental Package**: This package is currently experimental and has not yet been published to PyPI. See [Installation](#installation) section for local testing instructions.
 
@@ -248,18 +248,6 @@ hybrid_results = await docs.hybrid_search(
 ```
 
 📖 **[See complete search documentation](docs/search.md)** for vector embeddings, full-text indexing, hybrid search patterns, and performance optimization.
-
-## Documentation
-
-For detailed documentation on all features:
-
-- **📖 [Enhanced CRUD Operations](docs/enhanced-crud.md)** - Smart save, sync, and conflict resolution
-- **🔄 [Document State Management](docs/state-management.md)** - Change tracking and optimized updates  
-- **🔍 [Type-Safe Query Interface](docs/query-interface.md)** - Fluent query builder with method chaining
-- **⚡ [Bulk Operations](docs/bulk-operations.md)** - High-throughput batch processing
-- **🔎 [Search Features](docs/search.md)** - Vector, full-text, and hybrid search
-- **📚 [API Reference](docs/api-reference.md)** - Complete documentation and configuration
-- **📋 [Documentation Index](docs/README.md)** - Full documentation navigation
 
 ### Patch Operations
 
