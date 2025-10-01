@@ -130,10 +130,10 @@ async def main():
     
     # Option 2: Initialize client with endpoint and DefaultAzureCredential
     # (Recommended for production - uses managed identity, service principal, etc.)
-    client_manager = CosmosClientManager(
-        endpoint="https://your-account.documents.azure.com:443/"
-        # No key needed - automatically uses DefaultAzureCredential
-    )
+    # client_manager = CosmosClientManager(
+    #    endpoint="https://your-account.documents.azure.com:443/"
+    #    # No key needed - automatically uses DefaultAzureCredential
+    #)
     
     # Option 3: Initialize client with endpoint and key
     # client_manager = CosmosClientManager(
