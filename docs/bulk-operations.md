@@ -490,7 +490,7 @@ async def cleanup_expired_documents():
 
 ## Related Documentation
 
-- [Enhanced CRUD Operations](enhanced-crud.md) - Individual document operations
+- [Advanced CRUD Operations](advanced-crud.md) - Individual document operations
 - [Query Interface](query-interface.md) - Building queries for bulk operations
 - [State Management](state-management.md) - Efficient updates with change tracking
 - [API Reference](api-reference.md) - Complete bulk operation method signatures

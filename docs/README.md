@@ -9,8 +9,8 @@ Welcome to the comprehensive documentation for the Cosmos ODM (Object Document M
 
 ## Core Features
 
-### Enhanced Document Operations
-- [Enhanced CRUD Operations](enhanced-crud.md) - Advanced save, replace, sync operations with conflict resolution
+### Document Operations
+- [Advanced CRUD Operations](advanced-crud.md) - Smart save, replace, sync operations with conflict resolution
 - [Document State Management](state-management.md) - Change tracking, rollback, and optimized updates
 
 ### Query and Search
@@ -24,7 +24,7 @@ Welcome to the comprehensive documentation for the Cosmos ODM (Object Document M
 
 | Feature | Description | Benefits |
 |---------|-------------|----------|
-| **Enhanced CRUD** | Smart save, sync, and merge operations with conflict resolution | Reduced complexity, automatic conflict handling, optimized RU usage |
+| **Advanced CRUD** | Smart save, sync, and merge operations with conflict resolution | Reduced complexity, automatic conflict handling, optimized RU usage |
 | **State Management** | Automatic change detection and tracking | Only update changed fields, rollback support, reduced network traffic |
 | **Query Interface** | Type-safe fluent API with method chaining | IDE support, readable code, automatic SQL generation |
 | **Bulk Operations** | High-performance batch processing with BulkWriter | Concurrent execution, progress tracking, error resilience |
@@ -39,7 +39,7 @@ Welcome to the comprehensive documentation for the Cosmos ODM (Object Document M
 ┌─────────────────────────────────────────────────────────────┐
 │                    Application Layer                        │
 ├─────────────────────────────────────────────────────────────┤
-│  Enhanced CRUD    │  Query Builder  │  State Management    │
+│  Advanced CRUD    │  Query Builder  │  State Management    │
 │  - save()         │  - find()       │  - change tracking   │
 │  - sync()         │  - where()      │  - rollback()        │
 │  - merge()        │  - order_by()   │  - get_changes()     │
@@ -62,7 +62,7 @@ Welcome to the comprehensive documentation for the Cosmos ODM (Object Document M
 ### By Use Case
 
 **Content Management**
-- [Enhanced CRUD](enhanced-crud.md) for document lifecycle management
+- [Advanced CRUD](advanced-crud.md) for document lifecycle management
 - [Search Features](search.md) for content discovery
 - [State Management](state-management.md) for editing workflows
 
@@ -80,7 +80,7 @@ Welcome to the comprehensive documentation for the Cosmos ODM (Object Document M
 
 **Beginners**
 1. Start with [README Quick Start](../README.md#quick-start)
-2. Learn [Enhanced CRUD Operations](enhanced-crud.md)
+2. Learn [Advanced CRUD Operations](advanced-crud.md)
 3. Explore [Query Interface](query-interface.md)
 
 **Intermediate**

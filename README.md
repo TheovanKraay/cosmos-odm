@@ -8,7 +8,7 @@ A production-grade, async-first **Azure Cosmos DB NoSQL ODM** for Python with na
 
 ### 🚀 **Core ODM Capabilities**
 - **Async-first** with optional sync facade
-- **Enhanced CRUD operations**: smart save, replace, sync with conflict resolution
+- **Advanced CRUD operations**: smart save, replace, sync with conflict resolution
 - **Document state management**: change tracking, rollback, optimized updates
 - **Type-safe query builder**: fluent interface with method chaining and SQL generation
 - **Bulk operations**: efficient batch processing with BulkWriter for high-throughput
@@ -175,15 +175,15 @@ async def main():
 asyncio.run(main())
 ```
 
-## Enhanced Features
+## Key Features
 
-This ODM provides advanced capabilities beyond basic CRUD operations including enhanced CRUD operations with smart save and conflict resolution, document state management with change tracking, type-safe query builder interface, bulk operations for high-throughput processing, and comprehensive search features.
+This ODM provides advanced capabilities including smart CRUD operations with conflict resolution, document state management with change tracking, type-safe query builder interface, bulk operations for high-throughput processing, and comprehensive search features.
 
-📖 **[See detailed documentation](docs/README.md)** for all enhanced features.
+📖 **[See detailed documentation](docs/README.md)** for all features.
 
 ## Examples
 
-### Enhanced CRUD with State Management
+### Smart CRUD with State Management
 
 ```python
 # Enable automatic change tracking
@@ -366,7 +366,7 @@ except ConflictError:
 
 ### Running Tests
 
-Run the comprehensive test suite covering all enhanced features:
+Run the comprehensive test suite covering all features:
 
 ```bash
 # Install test dependencies

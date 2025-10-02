@@ -1,10 +1,10 @@
-# Enhanced CRUD Operations
+# Advanced CRUD Operations
 
 The Cosmos ODM provides advanced CRUD operations inspired by MongoDB patterns but optimized for Azure Cosmos DB's capabilities.
 
-## Overview
+## Smart Save Operation
 
-Enhanced CRUD operations extend the basic create, read, update, delete functionality with:
+Advanced CRUD operations provide intelligent document management with automatic conflict resolution, optimized database operations, and seamless state management integration.
 
 - **Smart save operations** that handle both insert and replace scenarios
 - **Conflict resolution** with customizable merge strategies  
@@ -54,7 +54,7 @@ if doc.is_changed:
 
 ## Replace Operations
 
-### Enhanced Replace
+### Advanced Replace Operation
 
 Replace operations update the entire document while supporting conflict resolution:
 

@@ -84,7 +84,7 @@ class Collection:
     ) -> None:
         """Delete document by partition key and id"""
     
-    # Enhanced CRUD
+    # Advanced CRUD
     async def save(
         self,
         document: Document,
@@ -108,7 +108,7 @@ class Collection:
         if_match: str = None,
         **kwargs
     ) -> Document:
-        """Enhanced replace with conflict resolution"""
+        """Advanced replace with conflict resolution"""
     
     async def sync_document(
         self,

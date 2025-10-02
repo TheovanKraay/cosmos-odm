@@ -536,6 +536,6 @@ async def multi_modal_search(
 ## Related Documentation
 
 - [Query Interface](query-interface.md) - Building complex search queries
-- [Enhanced CRUD Operations](enhanced-crud.md) - Document operations
+- [Advanced CRUD Operations](advanced-crud.md) - Document operations
 - [API Reference](api-reference.md) - Complete search method signatures
 - [Bulk Operations](bulk-operations.md) - Batch processing search results

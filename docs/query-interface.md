@@ -434,7 +434,7 @@ async def advanced_search(search_params):
 
 ## Related Documentation
 
-- [Enhanced CRUD Operations](enhanced-crud.md) - Advanced document operations
+- [Advanced CRUD Operations](advanced-crud.md) - Advanced document operations
 - [Bulk Operations](bulk-operations.md) - Batch processing with queries
 - [Search Features](search.md) - Vector and full-text search integration
 - [API Reference](api-reference.md) - Complete query method signatures
