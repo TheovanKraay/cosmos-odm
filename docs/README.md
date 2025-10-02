@@ -20,15 +20,18 @@ Welcome to the comprehensive documentation for the Cosmos ODM (Object Document M
 ### Performance and Scalability
 - [Bulk Operations](bulk-operations.md) - Efficient batch processing with BulkWriter
 
-## Feature Comparison
+## Features Overview
 
-| Feature | Basic ODM | Enhanced ODM | Benefits |
-|---------|-----------|--------------|----------|
-| Document CRUD | ✅ create, get, replace, delete | ✅ + save, sync, merge strategies | Smart operations, conflict resolution |
-| State Management | ❌ Manual tracking | ✅ Automatic change detection | Optimized updates, reduced RU consumption |
-| Query Interface | ❌ Raw SQL only | ✅ Type-safe fluent API | IDE support, SQL generation, readability |
-| Bulk Operations | ❌ Manual batching | ✅ BulkWriter + collection methods | High-throughput, error handling |
-| Search | ✅ Basic vector/text | ✅ + hybrid search, advanced filtering | Better relevance, complex queries |
+| Feature | Description | Benefits |
+|---------|-------------|----------|
+| **Enhanced CRUD** | Smart save, sync, and merge operations with conflict resolution | Reduced complexity, automatic conflict handling, optimized RU usage |
+| **State Management** | Automatic change detection and tracking | Only update changed fields, rollback support, reduced network traffic |
+| **Query Interface** | Type-safe fluent API with method chaining | IDE support, readable code, automatic SQL generation |
+| **Bulk Operations** | High-performance batch processing with BulkWriter | Concurrent execution, progress tracking, error resilience |
+| **Vector Search** | Native semantic similarity search using Cosmos DB | No external dependencies, integrated indexing, fast retrieval |
+| **Full-Text Search** | BM25-based text search with ranking | Content discovery, relevance scoring, native implementation |
+| **Hybrid Search** | Combined vector + text search with RRF | Best of both worlds, improved relevance, unified API |
+| **Document Models** | Pydantic v2 based with full validation | Type safety, automatic serialization, data validation |
 
 ## Architecture Overview
 
