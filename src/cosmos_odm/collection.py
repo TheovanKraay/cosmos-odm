@@ -410,10 +410,14 @@ class Collection(Generic[T]):
     
     # Bulk Operations
     
-    def bulk_writer(self) -> "BulkWriter":
-        """Create a bulk writer for batch operations."""
+    def bulk_writer(self, max_concurrency: int = 10) -> "BulkWriter":
+        """Create a bulk writer for batch operations.
+        
+        Args:
+            max_concurrency: Maximum number of concurrent operations (default: 10)
+        """
         from .query import BulkWriter
-        return BulkWriter(self)
+        return BulkWriter(self, max_concurrency=max_concurrency)
     
     async def insert_many(self, documents: List[T]) -> List[T]:
         """Insert multiple documents."""

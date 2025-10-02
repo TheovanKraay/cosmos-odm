@@ -214,14 +214,29 @@ results = await docs.find() \
 ### Bulk Operations
 
 ```python
-# Efficient batch processing
+# High-throughput batch processing with configurable concurrency
 from cosmos_odm.query import BulkWriter
 
-bulk = BulkWriter(docs)
+# Create BulkWriter with custom concurrency limit
+bulk = BulkWriter(docs, max_concurrency=20)  # Default is 10
+
+# Queue multiple operations
 for doc in large_document_list:
     bulk.insert(doc)
 
-results = await bulk.execute()
+# Execute with progress tracking
+def progress_callback(completed, total):
+    print(f"Progress: {completed}/{total} ({completed/total*100:.1f}%)")
+
+results = await bulk.execute(
+    progress_callback=progress_callback,
+    batch_size=100  # Report progress every 100 operations
+)
+
+# Check results
+successful = [r for r in results if r["success"]]
+failed = [r for r in results if not r["success"]]
+print(f"✅ {len(successful)} successful, ❌ {len(failed)} failed")
 ```
 
 ## Native Search Examples

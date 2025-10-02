@@ -1,5 +1,6 @@
 """Query builder and bulk operations for Cosmos ODM."""
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, List, Optional, TypeVar, TYPE_CHECKING, Union
 from datetime import datetime, timezone
@@ -142,10 +143,18 @@ class FindQuery(QueryBuilder[T]):
 
 
 class BulkWriter:
-    """Bulk operations writer."""
+    """Bulk operations writer with configurable concurrency."""
     
-    def __init__(self, collection: "Collection"):
+    def __init__(self, collection: "Collection", max_concurrency: int = 10):
+        """
+        Initialize BulkWriter.
+        
+        Args:
+            collection: The collection to perform operations on
+            max_concurrency: Maximum number of concurrent operations (default: 10)
+        """
         self.collection = collection
+        self.max_concurrency = max_concurrency
         self._operations: List[Dict[str, Any]] = []
     
     def insert(self, document: "Document") -> "BulkWriter":
@@ -203,48 +212,62 @@ class BulkWriter:
         self._operations.append(operation)
         return self
     
-    async def execute(self) -> List[Dict[str, Any]]:
-        """Execute all bulk operations."""
+    async def execute(self, *, progress_callback: Optional[callable] = None, batch_size: int = 50) -> List[Dict[str, Any]]:
+        """
+        Execute all bulk operations with configurable concurrency.
+        
+        Args:
+            progress_callback: Optional callback function called with (completed_count, total_count)
+            batch_size: Number of operations to process in each batch for progress reporting
+            
+        Returns:
+            List of operation results with success/failure status
+        """
         if not self._operations:
             return []
         
+        # Create semaphore for concurrency control
+        semaphore = asyncio.Semaphore(self.max_concurrency)
         results = []
+        completed_count = 0
+        total_count = len(self._operations)
         
-        # Group operations by partition key for batch processing
-        batches = {}
-        for op in self._operations:
-            pk = op["partition_key"]
-            if pk not in batches:
-                batches[pk] = []
-            batches[pk].append(op)
+        async def process_operation(operation: Dict[str, Any]) -> Dict[str, Any]:
+            """Process a single operation with semaphore control."""
+            nonlocal completed_count
+            
+            async with semaphore:
+                try:
+                    result = await self._execute_single_operation(operation)
+                    operation_result = {
+                        "success": True,
+                        "operation": operation["operation"],
+                        "partition_key": operation["partition_key"],
+                        "result": result
+                    }
+                except Exception as e:
+                    operation_result = {
+                        "success": False,
+                        "operation": operation["operation"],
+                        "partition_key": operation["partition_key"],
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                
+                # Update progress
+                completed_count += 1
+                if progress_callback and completed_count % batch_size == 0:
+                    progress_callback(completed_count, total_count)
+                
+                return operation_result
         
-        # Execute each batch
-        for partition_key, ops in batches.items():
-            batch_results = await self._execute_batch(partition_key, ops)
-            results.extend(batch_results)
+        # Execute all operations concurrently with semaphore limiting concurrency
+        tasks = [process_operation(op) for op in self._operations]
+        results = await asyncio.gather(*tasks, return_exceptions=False)
         
-        return results
-    
-    async def _execute_batch(self, partition_key: Any, operations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Execute operations for a single partition key."""
-        results = []
-        
-        # For now, execute operations individually
-        # TODO: Use actual batch operations when available in SDK
-        for op in operations:
-            try:
-                result = await self._execute_single_operation(op)
-                results.append({
-                    "success": True,
-                    "operation": op["operation"],
-                    "result": result
-                })
-            except Exception as e:
-                results.append({
-                    "success": False,
-                    "operation": op["operation"],
-                    "error": str(e)
-                })
+        # Final progress callback
+        if progress_callback:
+            progress_callback(completed_count, total_count)
         
         return results
     
@@ -252,23 +275,28 @@ class BulkWriter:
         """Execute a single operation."""
         op_type = operation["operation"]
         
+        # Extract partition key value if it's a PK object
+        partition_key = operation["partition_key"]
+        if hasattr(partition_key, 'value'):
+            partition_key = partition_key.value
+        
         if op_type == "create":
             return await self.collection.async_container.create_item(
                 body=operation["item"],
-                partition_key=operation["partition_key"]
+                partition_key=partition_key
             )
         
         elif op_type == "upsert":
             return await self.collection.async_container.upsert_item(
                 body=operation["item"],
-                partition_key=operation["partition_key"]
+                partition_key=partition_key
             )
         
         elif op_type == "replace":
             kwargs = {
                 "item": operation["item"]["id"],
                 "body": operation["item"],
-                "partition_key": operation["partition_key"]
+                "partition_key": partition_key
             }
             
             if "etag" in operation:
@@ -280,7 +308,7 @@ class BulkWriter:
         elif op_type == "delete":
             kwargs = {
                 "item": operation["item_id"],
-                "partition_key": operation["partition_key"]
+                "partition_key": partition_key
             }
             
             if "etag" in operation:

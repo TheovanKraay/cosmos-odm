@@ -244,6 +244,14 @@ class TestBulkOperations:
         bulk = collection.bulk_writer()
         assert isinstance(bulk, BulkWriter)
         assert len(bulk._operations) == 0
+        # Test default concurrency
+        assert bulk.max_concurrency == 10
+    
+    async def test_bulk_writer_custom_concurrency(self, collection):
+        """Test bulk writer with custom concurrency."""
+        bulk = collection.bulk_writer(max_concurrency=5)
+        assert isinstance(bulk, BulkWriter)
+        assert bulk.max_concurrency == 5
     
     async def test_bulk_insert_operations(self, collection):
         """Test bulk insert operations."""
@@ -266,16 +274,154 @@ class TestBulkOperations:
         # Create test documents
         insert_doc = collection.document_type(id="insert1", pk="partition1", name="Insert", age=25)
         upsert_doc = collection.document_type(id="upsert1", pk="partition1", name="Upsert", age=26)
+        replace_doc = collection.document_type(id="replace1", pk="partition1", name="Replace", age=27)
         
         # Add operations
         bulk.insert(insert_doc)
         bulk.upsert(upsert_doc)
+        bulk.replace(replace_doc)
         bulk.delete("partition1", "delete1")
         
-        assert len(bulk._operations) == 3
+        assert len(bulk._operations) == 4
         assert bulk._operations[0]["operation"] == "create"
         assert bulk._operations[1]["operation"] == "upsert"
-        assert bulk._operations[2]["operation"] == "delete"
+        assert bulk._operations[2]["operation"] == "replace"
+        assert bulk._operations[3]["operation"] == "delete"
+    
+    async def test_bulk_operation_partition_key_handling(self, collection):
+        """Test that PK objects are handled correctly in bulk operations."""
+        bulk = collection.bulk_writer()
+        
+        # Create document with PK object
+        doc = collection.document_type(id="pk_test", pk=PK("partition1"), name="PK Test", age=30)
+        bulk.insert(doc)
+        
+        # Verify PK is stored correctly
+        assert len(bulk._operations) == 1
+        operation = bulk._operations[0]
+        assert hasattr(operation["partition_key"], 'value')
+        assert operation["partition_key"].value == "partition1"
+    
+    async def test_bulk_progress_tracking_mock(self, collection):
+        """Test bulk progress tracking with mock execution."""
+        from unittest.mock import AsyncMock
+        
+        # Mock the collection's async_container
+        collection.async_container = AsyncMock()
+        collection.async_container.create_item = AsyncMock(return_value={"id": "test", "statusCode": 201})
+        
+        bulk = collection.bulk_writer(max_concurrency=2)
+        
+        # Add test documents
+        for i in range(5):
+            doc = collection.document_type(id=f"test{i}", pk="partition1", name=f"Test {i}", age=20+i)
+            bulk.insert(doc)
+        
+        # Track progress
+        progress_calls = []
+        def track_progress(completed, total):
+            progress_calls.append((completed, total))
+        
+        # Execute with progress tracking
+        results = await bulk.execute(
+            progress_callback=track_progress,
+            batch_size=2
+        )
+        
+        # Verify results
+        assert len(results) == 5
+        assert all(r["success"] for r in results)
+        assert len(progress_calls) > 0
+        
+        # Verify final progress shows completion
+        final_progress = progress_calls[-1]
+        assert final_progress[0] == final_progress[1] == 5
+    
+    async def test_bulk_concurrency_control_mock(self, collection):
+        """Test that concurrency control works with mock timing."""
+        import asyncio
+        import time
+        from unittest.mock import AsyncMock
+        
+        # Mock with artificial delay
+        async def mock_create_with_delay(*args, **kwargs):
+            await asyncio.sleep(0.1)  # 100ms delay
+            return {"id": "test", "statusCode": 201}
+        
+        collection.async_container = AsyncMock()
+        collection.async_container.create_item = mock_create_with_delay
+        
+        # Test low vs high concurrency
+        docs = [
+            collection.document_type(id=f"perf{i}", pk="partition1", name=f"Perf {i}", age=20+i)
+            for i in range(10)
+        ]
+        
+        # Low concurrency test
+        bulk_low = collection.bulk_writer(max_concurrency=2)
+        for doc in docs:
+            bulk_low.insert(doc)
+        
+        start_time = time.time()
+        results_low = await bulk_low.execute()
+        low_time = time.time() - start_time
+        
+        # High concurrency test
+        bulk_high = collection.bulk_writer(max_concurrency=8)
+        for doc in docs:
+            bulk_high.insert(doc)
+        
+        start_time = time.time()
+        results_high = await bulk_high.execute()
+        high_time = time.time() - start_time
+        
+        # Verify both succeeded
+        assert len(results_low) == 10
+        assert len(results_high) == 10
+        assert all(r["success"] for r in results_low)
+        assert all(r["success"] for r in results_high)
+        
+        # Higher concurrency should be faster (with some tolerance for timing variations)
+        assert high_time <= low_time + 0.1  # Allow small timing variance
+    
+    async def test_bulk_error_handling_mock(self, collection):
+        """Test bulk error handling with mock failures."""
+        from unittest.mock import AsyncMock
+        
+        # Mock with some failures
+        call_count = 0
+        async def mock_create_with_failures(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count % 3 == 0:  # Every 3rd call fails
+                raise Exception("Mock failure")
+            return {"id": f"success-{call_count}", "statusCode": 201}
+        
+        collection.async_container = AsyncMock()
+        collection.async_container.create_item = mock_create_with_failures
+        
+        bulk = collection.bulk_writer(max_concurrency=2)
+        
+        # Add documents
+        for i in range(6):
+            doc = collection.document_type(id=f"error{i}", pk="partition1", name=f"Error {i}", age=20+i)
+            bulk.insert(doc)
+        
+        results = await bulk.execute()
+        
+        # Verify mixed results
+        assert len(results) == 6
+        successful = [r for r in results if r["success"]]
+        failed = [r for r in results if not r["success"]]
+        
+        assert len(successful) == 4  # 2/3 should succeed
+        assert len(failed) == 2     # 1/3 should fail
+        
+        # Verify error details
+        for failure in failed:
+            assert "error" in failure
+            assert failure["error"] == "Mock failure"
+            assert failure["error_type"] == "Exception"
     
     async def test_insert_many_convenience(self, collection):
         """Test insert_many convenience method."""
