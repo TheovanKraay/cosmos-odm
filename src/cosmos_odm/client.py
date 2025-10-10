@@ -9,12 +9,14 @@ from azure.cosmos.aio import DatabaseProxy as AsyncDatabaseProxy
 
 from .errors import CosmosODMError
 
+_UNSET = object()  # Sentinel value
+
 
 class CosmosClientManager:
     """Manages Cosmos DB client instances and provides database/container access."""
 
     def __init__(self, connection_string: str | None = None, endpoint: str | None = None,
-                 key: str | None = None, **client_kwargs):
+                 key: str | None = _UNSET, **client_kwargs):
         """Initialize client manager.
         
         Args:
@@ -25,7 +27,7 @@ class CosmosClientManager:
         """
         self.connection_string = connection_string or os.getenv("COSMOS_CONNECTION_STRING")
         self.endpoint = endpoint or os.getenv("COSMOS_ENDPOINT")
-        self.key = key or os.getenv("COSMOS_KEY")
+        self.key = key if key is not _UNSET else os.getenv("COSMOS_KEY")
         self.client_kwargs = client_kwargs
 
         if not self.connection_string and not self.endpoint:
@@ -38,6 +40,8 @@ class CosmosClientManager:
         self._sync_client: CosmosClient | None = None
         self._async_databases: dict[str, AsyncDatabaseProxy] = {}
         self._sync_databases: dict[str, DatabaseProxy] = {}
+        self._async_credential = None
+        self._sync_credential = None
 
     @property
     def async_client(self) -> AsyncCosmosClient:
@@ -55,10 +59,11 @@ class CosmosClientManager:
                     )
                 else:
                     # Use Default Azure Credentials
-                    from azure.identity.aio import DefaultAzureCredential
-                    credential = DefaultAzureCredential()
+                    if self._async_credential is None:
+                        from azure.identity.aio import DefaultAzureCredential
+                        self._async_credential = DefaultAzureCredential()
                     self._async_client = AsyncCosmosClient(
-                        self.endpoint, credential, **self.client_kwargs
+                        self.endpoint, self._async_credential, **self.client_kwargs
                     )
         return self._async_client
 
@@ -78,10 +83,11 @@ class CosmosClientManager:
                     )
                 else:
                     # Use Default Azure Credentials
-                    from azure.identity import DefaultAzureCredential
-                    credential = DefaultAzureCredential()
+                    if self._sync_credential is None:
+                        from azure.identity import DefaultAzureCredential
+                        self._sync_credential = DefaultAzureCredential()
                     self._sync_client = CosmosClient(
-                        self.endpoint, credential, **self.client_kwargs
+                        self.endpoint, self._sync_credential, **self.client_kwargs
                     )
         return self._sync_client
 

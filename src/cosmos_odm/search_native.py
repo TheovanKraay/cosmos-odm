@@ -214,28 +214,42 @@ class IndexManager:
 
             # Handle full-text indexes
             if settings.full_text_indexes:
-                full_text_indexes = self._build_full_text_configuration(
-                    settings.full_text_indexes
-                )
+                # Check if container already has full-text policy
+                existing_full_text_policy = container_props.get("fullTextPolicy")
+                
+                if not existing_full_text_policy:
+                    print("WARNING: Container does not have a full-text policy. Full-text indexes cannot be added after container creation.")
+                    print("To use full-text search, recreate the container with full-text policy enabled.")
+                else:
+                    full_text_indexes = self._build_full_text_configuration(
+                        settings.full_text_indexes
+                    )
 
-                if "fullTextIndexes" not in indexing_policy:
-                    indexing_policy["fullTextIndexes"] = []
+                    if "fullTextIndexes" not in indexing_policy:
+                        indexing_policy["fullTextIndexes"] = []
 
-                current_ft_indexes = indexing_policy["fullTextIndexes"]
+                    current_ft_indexes = indexing_policy["fullTextIndexes"]
 
-                # Add new full-text indexes if not already present
-                for new_index in full_text_indexes:
-                    if not any(
-                        set(idx.get("paths", [])) == set(new_index["paths"])
-                        for idx in current_ft_indexes
-                    ):
-                        current_ft_indexes.append(new_index)
-                        needs_update = True
+                    # Add new full-text indexes if not already present
+                    for new_index in full_text_indexes:
+                        if not any(
+                            idx.get("path") == new_index["path"]
+                            for idx in current_ft_indexes
+                        ):
+                            current_ft_indexes.append(new_index)
+                            needs_update = True
 
             # Update container if needed
             if needs_update:
-                container_props["indexingPolicy"] = indexing_policy
-                await database.replace_container(container_name, container_props)
+                # Build container specification for replacement
+                # Note: replace_container needs partition_key as separate parameter
+                partition_key_info = container_props.get("partitionKey", {})
+                
+                await database.replace_container(
+                    container=container_name,
+                    partition_key=partition_key_info,
+                    indexing_policy=indexing_policy
+                )
 
                 # Re-read to get the effective policy
                 container_props = await container.read()
@@ -285,8 +299,10 @@ class IndexManager:
         indexes = []
 
         for spec in full_text_specs:
-            index = {"paths": spec.paths}
-            indexes.append(index)
+            # Create separate index entries for each path
+            for path in spec.paths:
+                index = {"path": path}
+                indexes.append(index)
 
         return indexes
 

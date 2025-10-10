@@ -35,6 +35,7 @@ A production-grade, async-first **Azure Cosmos DB NoSQL ODM** for Python with na
 ### Prerequisites
 - Python 3.11 or higher
 - Git (for cloning the repository)
+- Azure CLI (for DefaultAzureCredential authentication) - run `az login` first
 
 ### Local Installation for Testing
 
@@ -95,7 +96,7 @@ from typing import List
     ttl=30*24*3600,  # 30 days TTL
     vector_policy=[{
         "path": "/content_vector", 
-        "dataType": "float32", 
+        "data_type": "float32", 
         "dimensions": 1536
     }],
     vector_indexes=[{
@@ -106,7 +107,7 @@ from typing import List
         "paths": ["/title", "/content"]
     }]
 )
-class Document(Document):
+class MyDocument(Document):
     id: str
     tenantId: PK[str] = Field(serialization_alias="tenantId")
     title: str
@@ -130,10 +131,12 @@ async def main():
     
     # Option 2: Initialize client with endpoint and DefaultAzureCredential
     # (Recommended for production - uses managed identity, service principal, etc.)
-    # client_manager = CosmosClientManager(
-    #    endpoint="https://your-account.documents.azure.com:443/"
-    #    # No key needed - automatically uses DefaultAzureCredential
-    #)
+    # Make sure you're authenticated with Azure CLI: az login
+    client_manager = CosmosClientManager(
+        endpoint="https://your-account.documents.azure.com:443/",
+        key=None  # Explicitly set to None to avoid environment variable interference
+        # No key needed - automatically uses DefaultAzureCredential
+    )
     
     # Option 3: Initialize client with endpoint and key
     # client_manager = CosmosClientManager(
@@ -142,7 +145,7 @@ async def main():
     # )
     
     # Bind to collection
-    docs = await Document.bind(
+    docs = await MyDocument.bind(
         database="myapp",
         client_manager=client_manager
     )
@@ -151,7 +154,7 @@ async def main():
     await docs.ensure_indexes()
     
     # Create document
-    doc = Document(
+    doc = MyDocument(
         id="doc-1",
         tenantId=PK("tenant-1"),
         title="Introduction to Vector Search",
@@ -160,7 +163,11 @@ async def main():
     )
     
     created_doc = await docs.create(doc)
-    print(f"Created with RU: {created_doc._ru_metrics.request_charge}")
+    print(f"Created document: {created_doc.id}")
+    
+    # Check if RU metrics are available
+    if hasattr(created_doc, '_ru_metrics') and created_doc._ru_metrics:
+        print(f"Request charge: {created_doc._ru_metrics.request_charge} RU")
     
     # Point read (most efficient)
     doc = await docs.get(pk="tenant-1", id="doc-1")
@@ -180,6 +187,79 @@ asyncio.run(main())
 This ODM provides advanced capabilities including smart CRUD operations with conflict resolution, document state management with change tracking, type-safe query builder interface, bulk operations for high-throughput processing, and comprehensive search features.
 
 📖 **[See detailed documentation](docs/README.md)** for all features.
+
+## Authentication Options
+
+The Cosmos ODM supports multiple authentication methods for connecting to Azure Cosmos DB:
+
+### 1. DefaultAzureCredential (Recommended for Production)
+
+Uses Azure's DefaultAzureCredential which automatically tries various authentication methods in order:
+
+```python
+from cosmos_odm import CosmosClientManager
+
+# Automatically uses DefaultAzureCredential
+client_manager = CosmosClientManager(
+    endpoint="https://your-account.documents.azure.com:443/",
+    key=None  # Explicitly set to None
+)
+```
+
+**Authentication chain (in order of precedence):**
+1. **Azure CLI** - if you've run `az login`
+2. **Managed Identity** - for Azure services (VMs, App Service, Functions, etc.)
+3. **Visual Studio Code** - if logged in through Azure extension
+4. **Service Principal** - using environment variables:
+   - `AZURE_CLIENT_ID`
+   - `AZURE_CLIENT_SECRET` 
+   - `AZURE_TENANT_ID`
+
+**Setup examples:**
+```bash
+# For local development - Azure CLI
+az login
+
+# For Azure services - enable Managed Identity in Azure portal
+# No additional setup needed - automatically detected
+
+# For CI/CD or server applications - Service Principal
+export AZURE_CLIENT_ID="your-client-id"
+export AZURE_CLIENT_SECRET="your-client-secret" 
+export AZURE_TENANT_ID="your-tenant-id"
+```
+
+### 2. Connection String
+
+Simplest method for development and testing:
+
+```python
+client_manager = CosmosClientManager(
+    connection_string="AccountEndpoint=https://your-account.documents.azure.com:443/;AccountKey=your-key==;"
+)
+```
+
+### 3. Account Key
+
+Direct key-based authentication:
+
+```python
+client_manager = CosmosClientManager(
+    endpoint="https://your-account.documents.azure.com:443/",
+    key="your-account-key"
+)
+```
+
+### Authentication Troubleshooting
+
+If you encounter authentication issues:
+
+1. **For Azure CLI**: Run `az login` first
+2. **For Service Principal**: Ensure environment variables are set correctly
+3. **For Managed Identity**: Verify identity is assigned to your Azure resource
+4. **Environment Variables**: Avoid conflicts - explicitly set `key=None` when using DefaultAzureCredential
+
+**Note**: The `azure-identity` package is automatically installed as a dependency for DefaultAzureCredential support.
 
 ## Examples
 
@@ -215,7 +295,7 @@ results = await docs.find() \
 
 ```python
 # High-throughput batch processing with configurable concurrency
-from cosmos_odm.query import BulkWriter
+from cosmos_odm import BulkWriter
 
 # Create BulkWriter with custom concurrency limit
 bulk = BulkWriter(docs, max_concurrency=20)  # Default is 10
@@ -305,9 +385,9 @@ The ODM automatically provisions vector embedding policies and indexes:
 # Vector policy defines the embedding specification
 vector_policy = [{
     "path": "/content_vector",
-    "dataType": "float32",      # or "float16", "int8"  
+    "data_type": "float32",      # or "float16", "int8"  
     "dimensions": 1536,
-    "distanceFunction": "cosine"  # or "euclidean", "dotproduct"
+    "distance_function": "cosine"  # or "euclidean", "dotproduct"
 }]
 
 # Vector indexes define search optimization
@@ -349,16 +429,16 @@ Call `await docs.ensure_indexes()` to apply these policies idempotently.
 ## Error Handling
 
 ```python
-from cosmos_odm.exceptions import DocumentNotFoundError, ConflictError
+from cosmos_odm import NotFound, ConditionalCheckFailed
 
 try:
     doc = await docs.get(pk="tenant-1", id="nonexistent")
-except DocumentNotFoundError:
+except NotFound:
     print("Document not found")
 
 try:
-    await docs.save(doc, if_match="outdated-etag")
-except ConflictError:
+    await docs.replace(doc, if_match="outdated-etag")
+except ConditionalCheckFailed:
     print("Document was modified by another process")
 ```
 
@@ -411,3 +491,10 @@ MIT License - see [LICENSE](LICENSE) file.
 ---
 
 **Note**: This ODM requires Azure Cosmos DB for NoSQL with vector and full-text search preview features enabled. Check the [Azure documentation](https://docs.microsoft.com/azure/cosmos-db/) for the latest availability and setup instructions.
+
+### Recent Updates
+
+- **Authentication Enhancements**: Added comprehensive support for DefaultAzureCredential with automatic fallback chain
+- **Index Management**: Fixed container indexing operations to properly preserve partition key configurations  
+- **Dependencies**: Added azure-identity package for production-ready authentication
+- **Documentation**: Enhanced authentication guide with troubleshooting and multiple deployment scenarios

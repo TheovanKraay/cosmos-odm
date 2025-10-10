@@ -585,8 +585,13 @@ class Collection(Generic[T]):
 
     async def ensure_indexes(self) -> dict[str, Any]:
         """Ensure vector and full-text indexes are provisioned."""
+        # Ensure database and container exist first
+        container = await self._get_container()
+        database = self.client_manager.get_async_database(self.database_name)
         return await self._index_manager.ensure_indexes(
-            container=self.async_container,
+            container=container,
+            database=database,
+            container_name=self.container_name,
             settings=self._container_settings
         )
 

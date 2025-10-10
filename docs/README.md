@@ -4,7 +4,8 @@ Welcome to the comprehensive documentation for the Cosmos ODM (Object Document M
 
 ## Getting Started
 
-- [Installation and Quick Start](../README.md) - Basic setup and first steps
+- [Installation and Quick Start](../README.md) - Basic setup and first steps  
+- [Authentication Guide](../README.md#authentication-options) - Multiple auth methods including DefaultAzureCredential
 - [API Reference](api-reference.md) - Complete method signatures and configuration options
 
 ## Core Features
@@ -31,6 +32,7 @@ Welcome to the comprehensive documentation for the Cosmos ODM (Object Document M
 | **Vector Search** | Native semantic similarity search using Cosmos DB | No external dependencies, integrated indexing, fast retrieval |
 | **Full-Text Search** | BM25-based text search with ranking | Content discovery, relevance scoring, native implementation |
 | **Hybrid Search** | Combined vector + text search with RRF | Best of both worlds, improved relevance, unified API |
+| **Authentication** | Multiple auth methods including DefaultAzureCredential | Flexible deployment, production-ready security, Azure integration |
 | **Document Models** | Pydantic v2 based with full validation | Type safety, automatic serialization, data validation |
 
 ## Architecture Overview

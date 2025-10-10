@@ -509,33 +509,80 @@ class ETag:
 
 ```python
 class CosmosClientManager:
-    """Manages Cosmos DB client connections"""
+    """Manages Cosmos DB client connections with multiple authentication methods"""
     
     def __init__(
         self,
         connection_string: str = None,
         endpoint: str = None,
+        key: str = None,
         credential: Any = None,
+        database_name: str = None,
         consistency_level: str = "Session",
         **kwargs
     ):
-        """Initialize client manager"""
+        """Initialize client manager with flexible authentication options
+        
+        Authentication Options (in order of precedence):
+        1. connection_string - Complete connection string with endpoint and key
+        2. credential - Custom Azure credential object
+        3. key - Account key (requires endpoint)
+        4. DefaultAzureCredential - Automatic credential detection (when key=None)
+        
+        Args:
+            connection_string: Full Cosmos DB connection string
+            endpoint: Cosmos DB account endpoint URL
+            key: Account key (set to None to use DefaultAzureCredential)
+            credential: Custom Azure credential object
+            database_name: Default database name
+            consistency_level: Default consistency level ("Session", "Strong", etc.)
+            
+        Examples:
+            # Connection string
+            client = CosmosClientManager(
+                connection_string="AccountEndpoint=https://...;AccountKey=...;"
+            )
+            
+            # DefaultAzureCredential (recommended for production)
+            client = CosmosClientManager(
+                endpoint="https://your-account.documents.azure.com:443/",
+                key=None  # Triggers DefaultAzureCredential
+            )
+            
+            # Account key
+            client = CosmosClientManager(
+                endpoint="https://your-account.documents.azure.com:443/",
+                key="your-account-key"
+            )
+        """
     
-    async def get_database_client(
-        self,
-        database_name: str
-    ) -> DatabaseProxy:
-        """Get database client"""
+    @property
+    def async_client(self) -> AsyncCosmosClient:
+        """Get async Cosmos client instance"""
     
-    async def get_container_client(
+    @property  
+    def sync_client(self) -> CosmosClient:
+        """Get sync Cosmos client instance"""
+        
+    def get_database(self, database_name: str = None) -> AsyncDatabaseProxy:
+        """Get async database proxy"""
+    
+    def get_async_container(
         self,
         database_name: str,
         container_name: str
+    ) -> AsyncContainerProxy:
+        """Get async container proxy"""
+        
+    def get_sync_container(
+        self,
+        database_name: str, 
+        container_name: str
     ) -> ContainerProxy:
-        """Get container client"""
+        """Get sync container proxy"""
     
     async def close(self) -> None:
-        """Close all connections"""
+        """Close all connections and cleanup resources"""
 ```
 
 ## Exception Classes
