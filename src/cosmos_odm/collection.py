@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 from azure.cosmos import exceptions as cosmos_exceptions
@@ -118,7 +119,6 @@ class Collection(Generic[T]):
     async def create(self, document: T) -> T:
         """Create a new document."""
         # Update timestamps
-        from datetime import datetime, timezone
         document.updated_at = datetime.now(timezone.utc)
         if document.created_at is None:
             document.created_at = document.updated_at
@@ -135,7 +135,6 @@ class Collection(Generic[T]):
 
     async def replace(self, document: T, if_match: str | None = None) -> T:
         """Replace an existing document."""
-        from datetime import datetime, timezone
         document.updated_at = datetime.now(timezone.utc)
 
         try:
@@ -158,7 +157,6 @@ class Collection(Generic[T]):
 
     async def upsert(self, document: T) -> T:
         """Create or replace a document."""
-        from datetime import datetime, timezone
         document.updated_at = datetime.now(timezone.utc)
         if document.created_at is None:
             document.created_at = document.updated_at
@@ -272,7 +270,6 @@ class Collection(Generic[T]):
         """Save document (upsert operation)."""
         try:
             # Update timestamp
-            from datetime import datetime, timezone
             document.updated_at = datetime.now(timezone.utc)
             
             # Prepare document data
@@ -302,7 +299,6 @@ class Collection(Generic[T]):
             return None
         
         # Update timestamp in changes
-        from datetime import datetime, timezone
         changes["updated_at"] = datetime.now(timezone.utc)
         
         # Perform partial update
@@ -314,7 +310,6 @@ class Collection(Generic[T]):
         """Replace entire document."""
         try:
             # Update timestamp
-            from datetime import datetime, timezone
             document.updated_at = datetime.now(timezone.utc)
             
             # Prepare document data
@@ -372,10 +367,9 @@ class Collection(Generic[T]):
         """Delete document."""
         etag = None if ignore_etag else (document.etag.value if document.etag else None)
         await self.delete(
-            document.pk, 
-            document.id, 
-            etag=etag,
-            match_condition=None if ignore_etag else "IfMatch"
+            document.pk,
+            document.id,
+            if_match=etag
         )
     
     # Query Interface
@@ -498,12 +492,14 @@ class Collection(Generic[T]):
     async def full_text_search(
         self,
         text: str,
-        fields: list[str] = ["/content"],
+        fields: list[str] | None = None,
         k: int = 10,
         filter: str | dict[str, Any] | None = None,
         partition_key: Any | None = None
     ) -> SearchResults[T]:
         """Perform full-text search using BM25."""
+        if fields is None:
+            fields = ["/content"]
         sql, parameters = self._search_builder.build_full_text_search(
             text=text,
             fields=fields,
@@ -540,7 +536,7 @@ class Collection(Generic[T]):
         self,
         text: str,
         vector: list[float],
-        fields: list[str] = ["/content"],
+        fields: list[str] | None = None,
         vector_path: str = "/content_vector",
         k: int = 10,
         weights: list[int] | None = None,
@@ -548,6 +544,8 @@ class Collection(Generic[T]):
         partition_key: Any | None = None
     ) -> SearchResults[T]:
         """Perform hybrid search using RRF (Reciprocal Rank Fusion)."""
+        if fields is None:
+            fields = ["/content"]
         sql, parameters = self._search_builder.build_hybrid_search(
             text=text,
             vector=vector,

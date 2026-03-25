@@ -23,8 +23,9 @@ class TestConfig:
         if self.is_cloud:
             return self.azure_endpoint
         else:
-            # Local emulator endpoint
-            return "https://localhost:8081"
+            # Local emulator endpoint - MUST use 127.0.0.1, NOT localhost
+            # On Windows, localhost resolves to ::1 (IPv6) but emulator binds IPv4 only
+            return "https://127.0.0.1:8081"
     
     @property
     def key(self) -> str:

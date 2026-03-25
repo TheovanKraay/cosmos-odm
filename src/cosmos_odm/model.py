@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, Generic, Optional, TypeVar, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .types import ContainerSettings, FullTextIndexSpec, VectorIndexSpec, VectorPolicySpec
 
@@ -152,6 +152,18 @@ class Document(BaseModel):
     # Required fields
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Document identifier")
     schema_version: int = Field(default=1, description="Schema version for migrations")
+
+    @field_validator("id")
+    @classmethod
+    def validate_id(cls, v: str) -> str:
+        """Validate id field complies with Cosmos DB constraints."""
+        if v is not None:
+            encoded = v.encode("utf-8")
+            if len(encoded) > 1023:
+                raise ValueError(f"id exceeds 1023 bytes ({len(encoded)} bytes)")
+            if "/" in v or "\\" in v:
+                raise ValueError("id must not contain '/' or '\\' characters")
+        return v
 
     # Optional system fields
     etag: ETag | None = Field(default=None, description="ETag for optimistic concurrency")

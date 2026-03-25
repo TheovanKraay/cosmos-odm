@@ -120,6 +120,14 @@ class CosmosClientManager:
             self._async_client = None
             self._async_databases.clear()
 
+    async def __aenter__(self) -> "CosmosClientManager":
+        """Enter async context manager."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit async context manager, closing connections."""
+        await self.close()
+
     def __del__(self) -> None:
         """Cleanup on deletion."""
         # Note: We can't call async close() from __del__,
