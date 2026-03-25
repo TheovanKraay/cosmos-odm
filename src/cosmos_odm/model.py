@@ -157,12 +157,11 @@ class Document(BaseModel):
     @classmethod
     def validate_id(cls, v: str) -> str:
         """Validate id field complies with Cosmos DB constraints."""
-        if v is not None:
-            encoded = v.encode("utf-8")
-            if len(encoded) > 1023:
-                raise ValueError(f"id exceeds 1023 bytes ({len(encoded)} bytes)")
-            if "/" in v or "\\" in v:
-                raise ValueError("id must not contain '/' or '\\' characters")
+        encoded = v.encode("utf-8")
+        if len(encoded) > 1023:
+            raise ValueError(f"id exceeds 1023 bytes ({len(encoded)} bytes)")
+        if "/" in v or "\\" in v:
+            raise ValueError("id must not contain '/' or '\\' characters")
         return v
 
     # Optional system fields
