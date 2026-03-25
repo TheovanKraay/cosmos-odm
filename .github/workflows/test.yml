@@ -26,44 +26,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install Cosmos DB Emulator
-        run: |
-          # Download and install the emulator silently
-          $emulatorMsi = "$env:TEMP\cosmosdb-emulator.msi"
-          Invoke-WebRequest -Uri "https://aka.ms/cosmosdb-emulator" -OutFile $emulatorMsi
-          Start-Process msiexec.exe -ArgumentList "/i", $emulatorMsi, "/quiet", "/norestart" -Wait
-        shell: pwsh
 
-      - name: Start Cosmos DB Emulator
-        run: |
-          # Start emulator in its own window (NOT -NoNewWindow, which kills on step exit)
-          $emulatorPath = "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe"
-          Start-Process -FilePath $emulatorPath -ArgumentList "/NoExplorer", "/NoUI", "/DisableRateLimiting" -WindowStyle Hidden
-
-          # Poll until emulator is ready (up to 90 seconds)
-          $maxRetries = 30
-          $retryDelay = 3
-          $ready = $false
-          for ($i = 0; $i -lt $maxRetries; $i++) {
-            try {
-              # MUST use 127.0.0.1 — localhost resolves to ::1 (IPv6) on Windows
-              # but emulator binds IPv4 only
-              $response = Invoke-RestMethod -Uri "https://127.0.0.1:8081/_explorer/emulator.pem" -SkipCertificateCheck -TimeoutSec 5
-              if ($response) {
-                Write-Host "Emulator is ready after $($i * $retryDelay) seconds"
-                $ready = $true
-                break
-              }
-            } catch {
-              Write-Host "Waiting for emulator... attempt $($i + 1)/$maxRetries"
-              Start-Sleep -Seconds $retryDelay
-            }
-          }
-          if (-not $ready) {
-            Write-Error "Cosmos DB Emulator failed to start within $($maxRetries * $retryDelay) seconds"
-            exit 1
-          }
+      - name: Start Azure Cosmos DB Emulator
         shell: pwsh
+        run: |
+          # Use the pre-installed emulator PowerShell module (blocks until ready)
+          # Reference: https://github.com/microsoft/agent-framework/blob/main/.github/workflows/dotnet-build-and-test.yml
+          Write-Host "Launching Azure Cosmos DB Emulator"
+          Import-Module "$env:ProgramFiles\Azure Cosmos DB Emulator\PSModules\Microsoft.Azure.CosmosDB.Emulator"
+          Start-CosmosDbEmulator -NoUI -Key "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+          Write-Host "Emulator is ready"
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
