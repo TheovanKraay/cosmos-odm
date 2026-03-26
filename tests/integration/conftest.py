@@ -52,13 +52,13 @@ async def cosmos_client():
         yield client
 
 
-@pytest_asyncio.fixture
-async def test_database_name():
+@pytest.fixture
+def test_database_name():
     """Generate a unique test database name."""
     return f"test_cosmos_odm_{uuid.uuid4().hex[:8]}"
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(loop_scope="session")
 async def test_collection(cosmos_client, test_database_name):
     """Create a test collection, clean up after."""
     collection = Collection(

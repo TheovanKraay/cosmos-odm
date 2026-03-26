@@ -11,7 +11,7 @@ from cosmos_odm.model import PK, ETag
 from .conftest import IntegrationTestDoc
 
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="session")]
 
 
 class TestCRUDIntegration:
