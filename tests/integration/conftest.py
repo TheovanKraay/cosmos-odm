@@ -40,7 +40,7 @@ def suppress_ssl_warnings():
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def cosmos_client():
     """Singleton Cosmos client for the entire test session."""
     client = CosmosClientManager(
