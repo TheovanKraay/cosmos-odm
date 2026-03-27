@@ -124,15 +124,21 @@ class FindQuery(QueryBuilder[T]):
         if self._conditions:
             sql += " WHERE " + " AND ".join(self._conditions)
         
-        async for page in self.collection.query(
-            sql=sql,
-            parameters=self._parameters,
-            cross_partition=True,
-            max_item_count=1
-        ):
-            if page.items:
-                return page.items[0]
-            break
+        # Convert parameters to list format for SDK
+        param_list = [
+            {"name": f"@{k}" if not k.startswith("@") else k, "value": v}
+            for k, v in self._parameters.items()
+        ] if self._parameters else []
+        
+        # Query the container directly to get raw scalar results
+        # (collection.query() deserializes items as documents, but COUNT returns an int)
+        query_iterable = self.collection.async_container.query_items(
+            query=sql,
+            parameters=param_list,
+            max_item_count=1,
+        )
+        async for item in query_iterable:
+            return item
         
         return 0
     
